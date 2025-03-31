@@ -22,7 +22,7 @@ class PrecomputedActivationDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx]
 
-# === TensorBuffer: Iterable wrapper for training ===
+# === TensorBuffer: Iterable wrapper for batches ===
 class TensorBuffer:
     def __init__(self, data: Dataset, out_batch_size: int = 8192, device: str = "cpu"):
         self.data_loader = DataLoader(data, batch_size=out_batch_size, shuffle=True, drop_last=True)
@@ -36,19 +36,19 @@ class TensorBuffer:
         try:
             return next(self.iterator).to(self.device)
         except StopIteration:
-            # Optional: reset for next epoch-like behavior
             self.iterator = iter(self.data_loader)
             raise StopIteration
 
     def close(self):
-        pass  # API-compatible with ActivationBuffer
+        pass  # For API compatibility with ActivationBuffer
 
 # === Load dataset ===
-dataset = PrecomputedActivationDataset("data/activations_*.pt")
+dataset = PrecomputedActivationDataset("saved_activations/activations_*.pt")
+
 buffer = TensorBuffer(
     data=dataset,
     out_batch_size=16384,
-    device="cuda:0"
+    device="cuda:0",
 )
 
 # === SAE training config ===
@@ -69,7 +69,7 @@ trainer_cfg = {
     "device": "cuda:0",
 }
 
-# === Train the SAE ===
+# === Train Sparse Autoencoder ===
 ae = trainSAE(
     data=buffer,
     trainer_configs=[trainer_cfg],
