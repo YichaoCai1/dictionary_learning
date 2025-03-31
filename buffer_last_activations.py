@@ -21,7 +21,7 @@ tokenizer = model.tokenizer
 
 # === Load dataset (streaming mode) ===
 dataset = load_dataset(
-    "path/to/the_pile_depulicated",  # ← replace with your actual path
+    "/lts/ycai/Projects/Datasets/the_pile_deduplicated",  # ← replace with your actual path
     split="train",
     streaming=True
 )
