@@ -1,4 +1,3 @@
-# save_activations.py
 import torch as t
 from nnsight import LanguageModel
 from datasets import load_dataset
@@ -14,33 +13,20 @@ chunk_size = 100_000
 save_dir = "saved_activations"
 os.makedirs(save_dir, exist_ok=True)
 
-# === Multi-GPU Support ===
+# === Device config ===
 device = "cuda" if t.cuda.is_available() else "cpu"
 device_map = "auto" if t.cuda.device_count() > 1 else {"": 0}
 
-# === Load Model ===
+# === Load model ===
 print("Loading model...")
 model = LanguageModel(model_name, device_map=device_map)
 submodule = model.gpt_neox.final_layer_norm
-tokenizer = model.tokenizer
 
-# === Load Your Dataset ===
+# === Load dataset ===
 dataset_path = "/lts/ycai/Projects/Datasets/the_pile_deduplicated"
-
 print(f"Loading dataset from: {dataset_path}")
-dataset = load_dataset(
-    dataset_path,
-    split="train",
-    streaming=True
-)
+dataset = load_dataset(dataset_path, split="train", streaming=True)
 
-# Peek a few samples to verify loading
-print("✅ Sample data:")
-for i, example in enumerate(dataset):
-    print(f"[{i}] {example['text'][:80]}...")
-    if i >= 2: break
-
-# === Create Text Generator ===
 def text_generator():
     for example in dataset:
         yield example["text"]
@@ -50,58 +36,51 @@ buffer = []
 file_idx = 0
 total_activations = 0
 
-# === Main Loop ===
-with t.no_grad():
-    pbar = tqdm(desc="Total activations saved")
+# === Helper function to get activations ===
+def get_activations_from_batch(text_batch):
+    # === Use original working logic like in ActivationBuffer ===
+    with t.no_grad():
+        with model.trace(text_batch, invoker_args={"truncation": True, "max_length": ctx_len}):
+            hidden_states = submodule.output.save()
+            input = model.inputs.save()
+            submodule.output.stop()
 
-    while True:
-        try:
-            texts = [next(gen) for _ in range(batch_size)]
-        except StopIteration:
-            break
+        attn_mask = input.value[1]["attention_mask"]
+        hidden_states = hidden_states.value
+        if isinstance(hidden_states, tuple):
+            hidden_states = hidden_states[0]
 
-        # Tokenize
-        tokens = tokenizer(
-            texts,
-            return_tensors='pt',
-            max_length=ctx_len,
-            padding=True,
-            truncation=True
-        ).to(device)
+        hidden_states = hidden_states[attn_mask != 0]
+        return hidden_states.cpu()
 
-        # Trace and extract
-        with model.trace() as tracer:
-            hook = submodule.output.save_hook()
+# === Main loop ===
+print("Beginning activation extraction...")
+pbar = tqdm(desc="Total activations saved")
+while True:
+    try:
+        texts = [next(gen) for _ in range(batch_size)]
+    except StopIteration:
+        break
 
-            # ✅ Explicitly pass individual tensors, NOT a dict
-            _ = model(
-                input_ids=tokens["input_ids"],
-                attention_mask=tokens["attention_mask"]
-            )
+    reps = get_activations_from_batch(texts)
+    if reps.shape[0] == 0:
+        continue
 
-        reps = hook.value
-        attn_mask = tokens["attention_mask"]
+    buffer.append(reps)
+    total_activations += reps.shape[0]
+    pbar.update(reps.shape[0])
 
-        if isinstance(reps, tuple):
-            reps = reps[0]
-
-        # Filter out padding
-        reps = reps[attn_mask != 0]
-
-        buffer.append(reps.cpu())
-        total_activations += reps.shape[0]
-        pbar.update(reps.shape[0])
-
-        if sum(x.shape[0] for x in buffer) >= chunk_size:
-            chunk = t.cat(buffer, dim=0)
-            t.save(chunk, os.path.join(save_dir, f"activations_{file_idx:05d}.pt"))
-            buffer = []
-            file_idx += 1
-
-    if buffer:
+    if sum(x.shape[0] for x in buffer) >= chunk_size:
         chunk = t.cat(buffer, dim=0)
         t.save(chunk, os.path.join(save_dir, f"activations_{file_idx:05d}.pt"))
-        pbar.update(chunk.shape[0])
+        buffer = []
+        file_idx += 1
+
+# Final flush
+if buffer:
+    chunk = t.cat(buffer, dim=0)
+    t.save(chunk, os.path.join(save_dir, f"activations_{file_idx:05d}.pt"))
+    pbar.update(chunk.shape[0])
 
 pbar.close()
 print(f"✅ Done. Total activations saved: {total_activations}")
