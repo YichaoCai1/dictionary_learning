@@ -69,6 +69,8 @@ trainer_cfg = {
     "resample_steps": 25000,
     "warmup_steps": 1000,
     "device": "cuda",
+    "layer": -1,
+    "lm_name": "model.gpt_neox.final_layer_norm"
 }
 
 # === Train Sparse Autoencoder ===
