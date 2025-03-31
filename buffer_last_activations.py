@@ -5,23 +5,27 @@ from tqdm import tqdm
 import os
 
 # === Config ===
-device = "cuda:0"
 model_name = "EleutherAI/pythia-70m-deduped"
 ctx_len = 128
 batch_size = 64
 activation_dim = 512
 chunk_size = 100_000  # save every 100k activations
-save_dir = "data"
+save_dir = "saved_activations"
 os.makedirs(save_dir, exist_ok=True)
 
+# === Auto-detect and use all GPUs ===
+device = "cuda" if t.cuda.is_available() else "cpu"
+device_map = "auto" if t.cuda.device_count() > 1 else {"": 0}
+
 # === Load model and submodule ===
-model = LanguageModel(model_name, device_map=device)
+print("Loading model...")
+model = LanguageModel(model_name, device_map=device_map)
 submodule = model.gpt_neox.final_layer_norm
 tokenizer = model.tokenizer
 
-# === Load dataset (streaming mode) ===
+# === Load dataset (streaming) ===
 dataset = load_dataset(
-    "/lts/ycai/Projects/Datasets/the_pile_deduplicated",  # ← replace with your actual path
+    "/lts/ycai/Projects/Datasets/the_pile_deduplicated",
     split="train",
     streaming=True
 )
@@ -43,8 +47,9 @@ with t.no_grad():
         try:
             texts = [next(gen) for _ in range(batch_size)]
         except StopIteration:
-            break
+            break  # End of dataset
 
+        # Tokenize inputs
         tokens = tokenizer(
             texts,
             return_tensors='pt',
@@ -53,34 +58,41 @@ with t.no_grad():
             truncation=True
         ).to(device)
 
-        with model.trace(tokens, invoker_args={"max_length": ctx_len, "truncation": True}):
+        # Trace and extract activations
+        with model.trace() as tracer:
             reps = submodule.output.save()
             model.inputs.save()
-            submodule.output.stop()
+
+            _ = model(tokens, max_length=ctx_len, truncation=True)
 
             reps = reps.value
             input_data = model.inputs.value
             attn_mask = input_data[1]["attention_mask"]
 
+            submodule.output.stop()
+
         if isinstance(reps, tuple):
             reps = reps[0]
 
+        # Remove padded tokens
         reps = reps[attn_mask != 0]
 
         buffer.append(reps.cpu())
         total_activations += reps.shape[0]
         pbar.update(reps.shape[0])
 
-        if sum([x.shape[0] for x in buffer]) >= chunk_size:
+        # Save when full
+        if sum(x.shape[0] for x in buffer) >= chunk_size:
             chunk = t.cat(buffer, dim=0)
             t.save(chunk, os.path.join(save_dir, f"activations_{file_idx:05d}.pt"))
             buffer = []
             file_idx += 1
 
+    # Final flush
     if buffer:
         chunk = t.cat(buffer, dim=0)
         t.save(chunk, os.path.join(save_dir, f"activations_{file_idx:05d}.pt"))
         pbar.update(chunk.shape[0])
 
 pbar.close()
-print(f"✅ Done. Total activations: {total_activations}")
+print(f"✅ Done. Total activations saved: {total_activations}")
