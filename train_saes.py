@@ -67,7 +67,6 @@ trainer_cfg = {
     "lr": 1e-4,
     "steps": 120000,
     "resample_steps": 25000,
-    "ghost_threshold": None,
     "warmup_steps": 1000,
     "device": "cuda",
 }
