@@ -54,7 +54,7 @@ dataset = StreamingActivationDataset("saved_activations/activations_*.pt")
 buffer = TensorBuffer(
     data=dataset,
     out_batch_size=16384,
-    device="cuda:0",
+    device="cuda",
 )
 
 # === SAE training configuration ===
@@ -72,13 +72,17 @@ trainer_cfg = {
     "resample_steps": 25000,
     "ghost_threshold": None,
     "warmup_steps": 1000,
-    "device": "cuda:0",
+    "device": "cuda",
 }
 
 # === Train Sparse Autoencoder ===
 ae = trainSAE(
     data=buffer,
     trainer_configs=[trainer_cfg],
+    steps=120000,
+    save_steps=10000,
+    log_steps=10000,
+    verbose=True,
     save_dir="models"
 )
 
