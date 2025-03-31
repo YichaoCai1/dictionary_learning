@@ -58,11 +58,13 @@ with t.no_grad():
             model.inputs.save()
             submodule.output.stop()
 
-        reps = reps.value
+            reps = reps.value
+            input_data = model.inputs.value
+            attn_mask = input_data[1]["attention_mask"]
+
         if isinstance(reps, tuple):
             reps = reps[0]
 
-        attn_mask = model.inputs.value[1]["attention_mask"]
         reps = reps[attn_mask != 0]
 
         buffer.append(reps.cpu())
