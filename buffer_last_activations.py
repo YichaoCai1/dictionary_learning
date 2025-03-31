@@ -60,6 +60,7 @@ with t.no_grad():
         except StopIteration:
             break
 
+        # Tokenize
         tokens = tokenizer(
             texts,
             return_tensors='pt',
@@ -71,7 +72,12 @@ with t.no_grad():
         # Trace and extract
         with model.trace() as tracer:
             hook = submodule.output.save_hook()
-            _ = model(**tokens)
+
+            # ✅ Explicitly pass individual tensors, NOT a dict
+            _ = model(
+                input_ids=tokens["input_ids"],
+                attention_mask=tokens["attention_mask"]
+            )
 
         reps = hook.value
         attn_mask = tokens["attention_mask"]
@@ -79,10 +85,8 @@ with t.no_grad():
         if isinstance(reps, tuple):
             reps = reps[0]
 
+        # Filter out padding
         reps = reps[attn_mask != 0]
-
-        if reps.shape[0] == 0:
-            continue
 
         buffer.append(reps.cpu())
         total_activations += reps.shape[0]
