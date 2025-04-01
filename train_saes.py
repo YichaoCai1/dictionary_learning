@@ -2,7 +2,7 @@
 import torch
 import glob
 from torch.utils.data import IterableDataset, DataLoader
-from dictionary_learning.trainers import StandardTrainer
+from dictionary_learning.trainers import StandardTrainer, TopKTrainer, PAnnealTrainer, GatedSAETrainer
 from dictionary_learning import AutoEncoder
 from dictionary_learning.training import trainSAE
 
