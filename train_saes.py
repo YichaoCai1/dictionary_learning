@@ -54,7 +54,7 @@ dataset = StreamingActivationDataset("saved_activations/activations_*.pt")
 buffer = TensorBuffer(
     data=dataset,
     out_batch_size=16384,
-    device="cuda:0",
+    device="cuda",
 )
 
 # === SAE training configuration ===
@@ -63,22 +63,24 @@ trainer_cfg = {
     "dict_class": AutoEncoder,
     "activation_dim": 512,
     "dict_size": 32768,
-    "out_batch_size": 16384,
-    "entropy": False,
-    "io": "out",
-    "sparsity_penalty": 0.1,
+    "l1_penalty": 0.1,
     "lr": 1e-4,
     "steps": 120000,
     "resample_steps": 25000,
-    "ghost_threshold": None,
     "warmup_steps": 1000,
-    "device": "cuda:0",
+    "device": "cuda",
+    "layer": -1,
+    "lm_name": "model.gpt_neox.final_layer_norm"
 }
 
 # === Train Sparse Autoencoder ===
 ae = trainSAE(
     data=buffer,
     trainer_configs=[trainer_cfg],
+    steps=120000,
+    save_steps=[20000, 40000, 60000, 80000, 100000, 120000],
+    log_steps=10000,
+    verbose=True,
     save_dir="models"
 )
 
