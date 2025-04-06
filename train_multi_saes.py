@@ -114,13 +114,11 @@ def train_on_gpu(name, trainer_class, device):
         trainer_cfg["k"] = 32
     elif name == "panneal":
         trainer_cfg.update({
-            "trainer": StandardTrainer,
             "initial_sparsity_penalty": 0.1,
             "resample_steps": 25000,
         })
     elif name == "gated":
         trainer_cfg.update({
-            "trainer": StandardTrainer,
             "l1_penalty": 0.1,
         })
     else:

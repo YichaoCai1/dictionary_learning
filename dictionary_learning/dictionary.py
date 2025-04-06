@@ -49,7 +49,7 @@ class AutoEncoder(Dictionary, nn.Module):
         super().__init__()
         self.activation_dim = activation_dim
         self.dict_size = dict_size
-        self.bias = nn.Parameter(t.zeros(activation_dim)).to(device)
+        self.bias = nn.Parameter(t.zeros(activation_dim).to(device))
         self.encoder = nn.Linear(activation_dim, dict_size, bias=True, device=device)
         self.decoder = nn.Linear(dict_size, activation_dim, bias=False, device=device)
 
@@ -58,8 +58,8 @@ class AutoEncoder(Dictionary, nn.Module):
         ## normalize columns of w
         w = w / w.norm(dim=0, keepdim=True) * 0.1
         ## set encoder and decoder weights
-        self.encoder.weight = nn.Parameter(w.clone().T).to(device)
-        self.decoder.weight = nn.Parameter(w.clone()).to(device)
+        self.encoder.weight = nn.Parameter(w.clone().T.to(device))
+        self.decoder.weight = nn.Parameter(w.clone().to(device))
 
     def encode(self, x):
         return nn.ReLU()(self.encoder(x - self.bias))
@@ -184,11 +184,11 @@ class GatedAutoEncoder(Dictionary, nn.Module):
         super().__init__()
         self.activation_dim = activation_dim
         self.dict_size = dict_size
-        self.decoder_bias = nn.Parameter(t.empty(activation_dim)).to(device)
+        self.decoder_bias = nn.Parameter(t.empty(activation_dim).to(device))
         self.encoder = nn.Linear(activation_dim, dict_size, bias=False, device=device)
-        self.r_mag = nn.Parameter(t.empty(dict_size)).to(device)
-        self.gate_bias = nn.Parameter(t.empty(dict_size)).to(device)
-        self.mag_bias = nn.Parameter(t.empty(dict_size)).to(device)
+        self.r_mag = nn.Parameter(t.empty(dict_size).to(device))
+        self.gate_bias = nn.Parameter(t.empty(dict_size).to(device))
+        self.mag_bias = nn.Parameter(t.empty(dict_size).to(device))
         self.decoder = nn.Linear(dict_size, activation_dim, bias=False, device=device)
         if initialization == "default":
             self._reset_parameters()
@@ -283,13 +283,13 @@ class JumpReluAutoEncoder(Dictionary, nn.Module):
         super().__init__()
         self.activation_dim = activation_dim
         self.dict_size = dict_size
-        self.W_enc = nn.Parameter(t.empty(activation_dim, dict_size)).to(device)
-        self.b_enc = nn.Parameter(t.zeros(dict_size)).to(device)
+        self.W_enc = nn.Parameter(t.empty(activation_dim, dict_size).to(device))
+        self.b_enc = nn.Parameter(t.zeros(dict_size).to(device))
         self.W_dec = nn.Parameter(
-            t.nn.init.kaiming_uniform_(t.empty(dict_size, activation_dim)).to(device)
+            t.nn.init.kaiming_uniform_(t.empty(dict_size, activation_dim).to(device))
         )
-        self.b_dec = nn.Parameter(t.zeros(activation_dim)).to(device)
-        self.threshold = nn.Parameter(t.ones(dict_size) * 0.001).to(device)  # Appendix I
+        self.b_dec = nn.Parameter(t.zeros(activation_dim).to(device))
+        self.threshold = nn.Parameter(t.ones(dict_size).to(device) * 0.001)  # Appendix I
 
         self.apply_b_dec_to_input = False
 

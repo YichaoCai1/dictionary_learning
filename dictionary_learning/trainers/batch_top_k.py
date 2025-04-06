@@ -32,7 +32,7 @@ class BatchTopKSAE(Dictionary, nn.Module):
         self.encoder = nn.Linear(activation_dim, dict_size, device=device)
         self.encoder.weight.data = self.decoder.weight.T.clone()
         self.encoder.bias.data.zero_()
-        self.b_dec = nn.Parameter(t.zeros(activation_dim)).to(device)
+        self.b_dec = nn.Parameter(t.zeros(activation_dim).to(device))
 
     def encode(self, x: t.Tensor, return_active: bool = False, use_threshold: bool = True):
         post_relu_feat_acts_BF = nn.functional.relu(self.encoder(x - self.b_dec))
@@ -127,7 +127,7 @@ class BatchTopKTrainer(SAETrainer):
             t.manual_seed(seed)
             t.cuda.manual_seed_all(seed)
 
-        self.ae = dict_class(activation_dim, dict_size, k)
+        self.ae = dict_class(activation_dim, dict_size, k, device=device)
 
         if device is None:
             self.device = "cuda" if t.cuda.is_available() else "cpu"
