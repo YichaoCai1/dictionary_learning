@@ -78,7 +78,7 @@ class AutoEncoderTopK(Dictionary, nn.Module):
         self.encoder.weight.data = self.decoder.weight.T.clone()
         self.encoder.bias.data.zero_()
 
-        self.b_dec = nn.Parameter(t.zeros(activation_dim), device=device)
+        self.b_dec = nn.Parameter(t.zeros(activation_dim)).to(device)
 
     def encode(self, x: t.Tensor, return_topk: bool = False, use_threshold: bool = False):
         post_relu_feat_acts_BF = nn.functional.relu(self.encoder(x - self.b_dec))

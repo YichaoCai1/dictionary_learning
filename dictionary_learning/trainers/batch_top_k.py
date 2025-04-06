@@ -15,7 +15,7 @@ from ..trainers.trainer import (
 
 
 class BatchTopKSAE(Dictionary, nn.Module):
-    def __init__(self, activation_dim: int, dict_size: int, k: int):
+    def __init__(self, activation_dim: int, dict_size: int, k: int, device):
         super().__init__()
         self.activation_dim = activation_dim
         self.dict_size = dict_size
@@ -24,15 +24,15 @@ class BatchTopKSAE(Dictionary, nn.Module):
         self.register_buffer("k", t.tensor(k, dtype=t.int))
         self.register_buffer("threshold", t.tensor(-1.0, dtype=t.float32))
 
-        self.decoder = nn.Linear(dict_size, activation_dim, bias=False)
+        self.decoder = nn.Linear(dict_size, activation_dim, bias=False, device=device)
         self.decoder.weight.data = set_decoder_norm_to_unit_norm(
             self.decoder.weight, activation_dim, dict_size
         )
 
-        self.encoder = nn.Linear(activation_dim, dict_size)
+        self.encoder = nn.Linear(activation_dim, dict_size, device=device)
         self.encoder.weight.data = self.decoder.weight.T.clone()
         self.encoder.bias.data.zero_()
-        self.b_dec = nn.Parameter(t.zeros(activation_dim))
+        self.b_dec = nn.Parameter(t.zeros(activation_dim)).to(device)
 
     def encode(self, x: t.Tensor, return_active: bool = False, use_threshold: bool = True):
         post_relu_feat_acts_BF = nn.functional.relu(self.encoder(x - self.b_dec))
