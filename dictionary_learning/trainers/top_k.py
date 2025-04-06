@@ -60,7 +60,7 @@ class AutoEncoderTopK(Dictionary, nn.Module):
     be stored in the same shape as the encoder.
     """
 
-    def __init__(self, activation_dim: int, dict_size: int, k: int):
+    def __init__(self, activation_dim: int, dict_size: int, k: int, device):
         super().__init__()
         self.activation_dim = activation_dim
         self.dict_size = dict_size
@@ -69,16 +69,16 @@ class AutoEncoderTopK(Dictionary, nn.Module):
         self.register_buffer("k", t.tensor(k, dtype=t.int))
         self.register_buffer("threshold", t.tensor(-1.0, dtype=t.float32))
 
-        self.decoder = nn.Linear(dict_size, activation_dim, bias=False)
+        self.decoder = nn.Linear(dict_size, activation_dim, bias=False, device=device)
         self.decoder.weight.data = set_decoder_norm_to_unit_norm(
             self.decoder.weight, activation_dim, dict_size
         )
 
-        self.encoder = nn.Linear(activation_dim, dict_size)
+        self.encoder = nn.Linear(activation_dim, dict_size, device=device)
         self.encoder.weight.data = self.decoder.weight.T.clone()
         self.encoder.bias.data.zero_()
 
-        self.b_dec = nn.Parameter(t.zeros(activation_dim))
+        self.b_dec = nn.Parameter(t.zeros(activation_dim), device=device)
 
     def encode(self, x: t.Tensor, return_topk: bool = False, use_threshold: bool = False):
         post_relu_feat_acts_BF = nn.functional.relu(self.encoder(x - self.b_dec))
@@ -134,7 +134,7 @@ class AutoEncoderTopK(Dictionary, nn.Module):
         elif "k" in state_dict and k != state_dict["k"].item():
             raise ValueError(f"k={k} != {state_dict['k'].item()}=state_dict['k']")
 
-        autoencoder = AutoEncoderTopK(activation_dim, dict_size, k)
+        autoencoder = AutoEncoderTopK(activation_dim, dict_size, k, device=device)
         autoencoder.load_state_dict(state_dict)
         if device is not None:
             autoencoder.to(device)

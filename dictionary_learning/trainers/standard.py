@@ -43,7 +43,7 @@ class StandardTrainer(SAETrainer):
             t.cuda.manual_seed_all(seed)
 
         # initialize dictionary
-        self.ae = dict_class(activation_dim, dict_size)
+        self.ae = dict_class(activation_dim, dict_size, device=device)
 
         self.lr = lr
         self.l1_penalty=l1_penalty

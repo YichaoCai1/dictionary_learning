@@ -35,7 +35,7 @@ class AsyncStreamingDataset(IterableDataset):
             if self.shuffle_files:
                 random.shuffle(paths)
             for path in paths:
-                print(f"📥 Prefetching from: {path}")
+                print(f"📅 Prefetching from: {path}")
                 chunk = torch.load(path, map_location=self.device)
                 if self.shuffle_each_chunk:
                     chunk = chunk[torch.randperm(len(chunk))]
@@ -58,9 +58,9 @@ class TensorBuffer:
             data,
             batch_size=out_batch_size,
             drop_last=True,
-            num_workers=0,           # No extra workers; already async
-            pin_memory=True,         # Boosts CPU → GPU transfer
-            persistent_workers=False # not needed since we async prefetch manually
+            num_workers=0,
+            pin_memory=True,
+            persistent_workers=False
         )
         self.device = device
         self.iterator = iter(self.data_loader)
@@ -81,7 +81,6 @@ trainer_gpu_pairs = [
     ("topk", TopKTrainer, "cuda:1"),
     ("panneal", PAnnealTrainer, "cuda:2"),
     ("gated", GatedSAETrainer, "cuda:3"),
-    
 ]
 
 # === Shared async dataset ===
@@ -98,63 +97,39 @@ def train_on_gpu(name, trainer_class, device):
     print(f"🚀 Starting {name} on {device}")
     buffer = TensorBuffer(data=dataset, out_batch_size=16384, device=device)
 
-    if name == "topk" or name == "batch_topk":
-        trainer_cfg = {
-            "trainer": trainer_class,
-            "activation_dim": 512,
-            "dict_size": 32768,
-            "k": 32,
-            "lr": 1e-4,
-            "steps": 120000,
-            "warmup_steps": 1000,
-            "device": device,
-            "layer": -1,
-            "lm_name": "model.gpt_neox.final_layer_norm"
-        }
+    trainer_cfg = {
+        "trainer": trainer_class,
+        "activation_dim": 512,
+        "dict_size": 32768,
+        "lr": 1e-4,
+        "steps": 120000,
+        "warmup_steps": 1000,
+        "device": device,
+        "layer": -1,
+        "lm_name": "model.gpt_neox.final_layer_norm"
+    }
+
+    # Customize sparsity strategy
+    if name in ["topk", "batch_topk"]:
+        trainer_cfg["k"] = 32
     elif name == "panneal":
-        trainer_cfg = {
+        trainer_cfg.update({
             "trainer": StandardTrainer,
-            "activation_dim": 512,
-            "dict_size": 32768,
             "initial_sparsity_penalty": 0.1,
-            "lr": 1e-4,
-            "steps": 120000,
             "resample_steps": 25000,
-            "warmup_steps": 1000,
-            "device": device,
-            "layer": -1,
-            "lm_name": "model.gpt_neox.final_layer_norm"
-        } 
-    elif name == "gdm":
-        trainer_cfg = {
+        })
+    elif name == "gated":
+        trainer_cfg.update({
             "trainer": StandardTrainer,
-            "activation_dim": 512,
-            "dict_size": 32768,
             "l1_penalty": 0.1,
-            "lr": 1e-4,
-            "steps": 120000,
-            "warmup_steps": 1000,
-            "device": device,
-            "layer": -1,
-            "lm_name": "model.gpt_neox.final_layer_norm"
-        }
+        })
     else:
-        trainer_cfg = {
-            "trainer": StandardTrainer,
-            "activation_dim": 512,
-            "dict_size": 32768,
-            "l1_penalty": 0.1,
-            "lr": 1e-4,
-            "steps": 120000,
-            "resample_steps": 25000,
-            "warmup_steps": 1000,
-            "device": "cuda",
-            "layer": -1,
-            "lm_name": "model.gpt_neox.final_layer_norm"
-        }
-    
+        trainer_cfg["l1_penalty"] = 0.1
+        trainer_cfg["resample_steps"] = 25000
+
     ae = trainSAE(
-        data=buffer, trainer_configs=[trainer_cfg],     
+        data=buffer,
+        trainer_configs=[trainer_cfg],
         steps=120000,
         save_steps=[20000, 40000, 60000, 80000, 100000, 120000],
         log_steps=10000,

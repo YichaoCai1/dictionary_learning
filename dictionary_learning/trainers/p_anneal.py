@@ -57,7 +57,7 @@ class PAnnealTrainer(SAETrainer):
         # initialize dictionary
         self.activation_dim = activation_dim
         self.dict_size = dict_size
-        self.ae = dict_class(activation_dim, dict_size)
+        self.ae = dict_class(activation_dim, dict_size, device=device)
         self.ae.to(self.device)
         
         self.lr = lr

@@ -45,21 +45,21 @@ class AutoEncoder(Dictionary, nn.Module):
     A one-layer autoencoder.
     """
 
-    def __init__(self, activation_dim, dict_size):
+    def __init__(self, activation_dim, dict_size, device):
         super().__init__()
         self.activation_dim = activation_dim
         self.dict_size = dict_size
-        self.bias = nn.Parameter(t.zeros(activation_dim))
-        self.encoder = nn.Linear(activation_dim, dict_size, bias=True)
-        self.decoder = nn.Linear(dict_size, activation_dim, bias=False)
+        self.bias = nn.Parameter(t.zeros(activation_dim), device=device)
+        self.encoder = nn.Linear(activation_dim, dict_size, bias=True, device=device)
+        self.decoder = nn.Linear(dict_size, activation_dim, bias=False, device=device)
 
         # initialize encoder and decoder weights
         w = t.randn(activation_dim, dict_size)
         ## normalize columns of w
         w = w / w.norm(dim=0, keepdim=True) * 0.1
         ## set encoder and decoder weights
-        self.encoder.weight = nn.Parameter(w.clone().T)
-        self.decoder.weight = nn.Parameter(w.clone())
+        self.encoder.weight = nn.Parameter(w.clone().T, device=device)
+        self.decoder.weight = nn.Parameter(w.clone(), device=device)
 
     def encode(self, x):
         return nn.ReLU()(self.encoder(x - self.bias))
