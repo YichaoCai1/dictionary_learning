@@ -6,7 +6,7 @@ import random
 import threading
 import queue
 from torch.utils.data import IterableDataset, DataLoader
-from dictionary_learning.trainers import StandardTrainer, TopKTrainer, PAnnealTrainer, GatedSAETrainer
+from dictionary_learning.trainers import StandardTrainer, TopKTrainer, PAnnealTrainer, GatedSAETrainer, BatchTopKSAE
 from dictionary_learning import AutoEncoder
 from dictionary_learning.training import trainSAE
 
@@ -77,10 +77,11 @@ class TensorBuffer:
 
 # === Define trainer classes and target GPUs ===
 trainer_gpu_pairs = [
-    ("standard", StandardTrainer, "cuda:0"),
+    ("batch_topk", BatchTopKSAE, "cuda:0"),
     ("topk", TopKTrainer, "cuda:1"),
     ("panneal", PAnnealTrainer, "cuda:2"),
     ("gated", GatedSAETrainer, "cuda:3"),
+    
 ]
 
 # === Shared async dataset ===
@@ -102,20 +103,24 @@ def train_on_gpu(name, trainer_class, device):
         "dict_class": AutoEncoder,
         "activation_dim": 512,
         "dict_size": 32768,
-        "out_batch_size": 16384,
-        "entropy": False,
-        "io": "out",
         "sparsity_penalty": 0.1,
         "lr": 1e-4,
         "steps": 120000,
         "resample_steps": 25000,
-        "ghost_threshold": None,
         "warmup_steps": 1000,
         "device": device,
+        "layer": -1,
+        "lm_name": "model.gpt_neox.final_layer_norm"
     }
 
-    ae = trainSAE(data=buffer, trainer_configs=[trainer_cfg], save_dir=f"models/{name}")
-    ae.save(f"models/{name}/final_sae.pt")
+    ae = trainSAE(
+        data=buffer, trainer_configs=[trainer_cfg],     
+        steps=120000,
+        save_steps=[20000, 40000, 60000, 80000, 100000, 120000],
+        log_steps=10000,
+        verbose=True,
+        save_dir=f"models/{name}"
+    )
     print(f"✅ Finished {name} on {device}")
 
 # === Launch threads for each trainer + GPU ===

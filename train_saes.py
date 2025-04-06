@@ -83,6 +83,3 @@ ae = trainSAE(
     verbose=True,
     save_dir="models"
 )
-
-# Optional: Save trained model
-ae.save("models/final_sae.pt")
