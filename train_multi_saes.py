@@ -6,7 +6,7 @@ import random
 import threading
 import queue
 from torch.utils.data import IterableDataset, DataLoader
-from dictionary_learning.trainers import StandardTrainer, TopKTrainer, PAnnealTrainer, GatedSAETrainer, BatchTopKSAE
+from dictionary_learning.trainers import StandardTrainer, TopKTrainer, PAnnealTrainer, GatedSAETrainer, BatchTopKTrainer
 from dictionary_learning import AutoEncoder
 from dictionary_learning.training import trainSAE
 
@@ -77,7 +77,7 @@ class TensorBuffer:
 
 # === Define trainer classes and target GPUs ===
 trainer_gpu_pairs = [
-    ("batch_topk", BatchTopKSAE, "cuda:0"),
+    ("batch_topk", BatchTopKTrainer, "cuda:0"),
     ("topk", TopKTrainer, "cuda:1"),
     ("panneal", PAnnealTrainer, "cuda:2"),
     ("gated", GatedSAETrainer, "cuda:3"),
@@ -98,20 +98,61 @@ def train_on_gpu(name, trainer_class, device):
     print(f"🚀 Starting {name} on {device}")
     buffer = TensorBuffer(data=dataset, out_batch_size=16384, device=device)
 
-    trainer_cfg = {
-        "trainer": trainer_class,
-        "activation_dim": 512,
-        "dict_size": 32768,
-        "sparsity_penalty": 0.1,
-        "lr": 1e-4,
-        "steps": 120000,
-        "resample_steps": 25000,
-        "warmup_steps": 1000,
-        "device": device,
-        "layer": -1,
-        "lm_name": "model.gpt_neox.final_layer_norm"
-    }
-
+    if name == "topk" or name == "batch_topk":
+        trainer_cfg = {
+            "trainer": trainer_class,
+            "activation_dim": 512,
+            "dict_size": 32768,
+            "k": 32,
+            "lr": 1e-4,
+            "steps": 120000,
+            "warmup_steps": 1000,
+            "device": device,
+            "layer": -1,
+            "lm_name": "model.gpt_neox.final_layer_norm"
+        }
+    elif name == "panneal":
+        trainer_cfg = {
+            "trainer": StandardTrainer,
+            "activation_dim": 512,
+            "dict_size": 32768,
+            "initial_sparsity_penalty": 0.1,
+            "lr": 1e-4,
+            "steps": 120000,
+            "resample_steps": 25000,
+            "warmup_steps": 1000,
+            "device": device,
+            "layer": -1,
+            "lm_name": "model.gpt_neox.final_layer_norm"
+        } 
+    elif name == "gdm":
+        trainer_cfg = {
+            "trainer": StandardTrainer,
+            "activation_dim": 512,
+            "dict_size": 32768,
+            "l1_penalty": 0.1,
+            "lr": 1e-4,
+            "steps": 120000,
+            "warmup_steps": 1000,
+            "device": device,
+            "layer": -1,
+            "lm_name": "model.gpt_neox.final_layer_norm"
+        }
+    else:
+        trainer_cfg = {
+            "trainer": StandardTrainer,
+            "activation_dim": 512,
+            "dict_size": 32768,
+            "l1_penalty": 0.1,
+            "lr": 1e-4,
+            "steps": 120000,
+            "resample_steps": 25000,
+            "warmup_steps": 1000,
+            "device": "cuda",
+            "layer": -1,
+            "lm_name": "model.gpt_neox.final_layer_norm"
+        }
+    
     ae = trainSAE(
         data=buffer, trainer_configs=[trainer_cfg],     
         steps=120000,
