@@ -60,7 +60,6 @@ buffer = TensorBuffer(
 # === SAE training configuration ===
 trainer_cfg = {
     "trainer": StandardTrainer,
-    "dict_class": AutoEncoder,
     "activation_dim": 512,
     "dict_size": 32768,
     "l1_penalty": 0.1,

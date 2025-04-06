@@ -100,7 +100,6 @@ def train_on_gpu(name, trainer_class, device):
 
     trainer_cfg = {
         "trainer": trainer_class,
-        "dict_class": AutoEncoder,
         "activation_dim": 512,
         "dict_size": 32768,
         "sparsity_penalty": 0.1,
