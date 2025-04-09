@@ -81,6 +81,7 @@ trainer_gpu_pairs = [
     ("topk", TopKTrainer, "cuda:1"),
     ("panneal", PAnnealTrainer, "cuda:2"),
     ("gated", GatedSAETrainer, "cuda:3"),
+    ("vanilla_sae", StandardTrainer, "cuda:0")
 ]
 
 # === Shared async dataset ===

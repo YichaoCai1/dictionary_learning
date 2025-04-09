@@ -51,7 +51,7 @@ def get_activations_from_batch(text_batch):
             hidden_states = hidden_states[0]
 
         hidden_states = hidden_states[attn_mask != 0]
-        return hidden_states.cpu()
+        return hidden_states.contiguous().cpu()
 
 # === Main loop ===
 print("Beginning activation extraction...")
