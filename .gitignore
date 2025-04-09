@@ -166,3 +166,4 @@ nohup.out
 *.zip
 models/
 results
+word_pairs
