@@ -165,5 +165,5 @@ run_experiment.sh
 nohup.out
 *.zip
 models/
-results
-word_pairs
+results/
+word_pairs/
