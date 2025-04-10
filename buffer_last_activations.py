@@ -5,12 +5,19 @@ from tqdm import tqdm
 import os
 
 # === Config ===
-model_name = "EleutherAI/pythia-70m-deduped"
+# model_name = "EleutherAI/pythia-70m-deduped"
+# save_dir = "saved_activations_70m"
+
+model_name = "EleutherAI/pythia-1b-deduped"
+save_dir = "saved_activations_1b"
+
+# model_name = "EleutherAI/pythia-6.9b-deduped"
+# save_dir = "saved_activations_6.9b"
+
 ctx_len = 128
 batch_size = 64
 activation_dim = 512
 chunk_size = 100_000
-save_dir = "saved_activations"
 os.makedirs(save_dir, exist_ok=True)
 
 # === Device config ===
