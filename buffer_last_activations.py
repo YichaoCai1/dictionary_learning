@@ -45,7 +45,6 @@ total_activations = 0
 
 # === Helper function to get activations ===
 def get_activations_from_batch(text_batch):
-    # === Use original working logic like in ActivationBuffer ===
     with t.no_grad():
         with model.trace(text_batch, invoker_args={"truncation": True, "max_length": ctx_len}):
             hidden_states = submodule.output.save()
@@ -57,9 +56,12 @@ def get_activations_from_batch(text_batch):
         if isinstance(hidden_states, tuple):
             hidden_states = hidden_states[0]
 
+        # ✅ Move attention mask to the same device as hidden_states
+        attn_mask = attn_mask.to(hidden_states.device)
+
         hidden_states = hidden_states[attn_mask != 0]
         return hidden_states.contiguous().cpu()
-
+    
 # === Main loop ===
 print("Beginning activation extraction...")
 pbar = tqdm(desc="Total activations saved")
