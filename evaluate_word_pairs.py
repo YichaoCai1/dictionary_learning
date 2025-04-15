@@ -8,6 +8,7 @@ import importlib
 import inspect
 from collections import defaultdict
 import numpy as np
+import pandas as pd
 import joblib
 from sklearn.linear_model import LogisticRegression
 from scipy.optimize import linear_sum_assignment
@@ -192,30 +193,76 @@ def main():
         all_dict_feats.append(dict_feats)
         all_metrics[name] = {"avg_metrics": avg_metrics}
 
+    # Save metric-wise CSVs
+    metrics_dict = defaultdict(dict)
+    for concept, values in all_metrics.items():
+        for metric, score in values["avg_metrics"].items():
+            metrics_dict[metric][concept] = score
+
+    for metric, concept_scores in metrics_dict.items():
+        df = pd.DataFrame.from_dict(concept_scores, orient="index", columns=[metric])
+        df.index.name = "concept"
+        df.loc["average"] = df[metric].mean()
+        df.to_csv(output_dir / f"{metric}.csv")
+
+    # Pearson correlation (original & exp)
     C = len(all_logits)
     D = all_dict_feats[0].shape[1]
-    cost_matrix = np.zeros((C, D))
+    corr_orig = np.zeros((C, D))
+    corr_exp = np.zeros((C, D))
 
     for i in range(C):
+        x = all_logits[i]
         for j in range(D):
-            x = all_logits[i]
-            y = all_dict_feats[i][:, j]
-            if np.std(x) == 0 or np.std(y) == 0:
-                corr = 0.0
-            else:
-                corr = np.corrcoef(x, y)[0, 1]
-            cost_matrix[i, j] = -np.nan_to_num(corr)
+            z = all_dict_feats[i][:, j]
+            z_exp = np.exp(z)
+            corr_orig[i, j] = np.corrcoef(x, z)[0, 1] if np.std(x) > 0 and np.std(z) > 0 else 0.0
+            corr_exp[i, j] = np.corrcoef(x, z_exp)[0, 1] if np.std(x) > 0 and np.std(z_exp) > 0 else 0.0
 
+    # Matching based on original
+    cost_matrix = -corr_orig
     row_ind, col_ind = linear_sum_assignment(cost_matrix)
-
     for i, dim in zip(row_ind, col_ind):
         all_metrics[concept_names[i]]["matched_dim"] = int(dim)
         all_metrics[concept_names[i]]["matched_corr"] = -float(cost_matrix[i, dim])
 
+    # Matching based on exp(z)
+    cost_matrix_exp = -corr_exp
+    row_ind_exp, col_ind_exp = linear_sum_assignment(cost_matrix_exp)
+    for i, dim in zip(row_ind_exp, col_ind_exp):
+        all_metrics[concept_names[i]]["matched_dim_exp"] = int(dim)
+        all_metrics[concept_names[i]]["matched_corr_exp"] = -float(cost_matrix_exp[i, dim])
+
+    # Save matched summaries with average row
+    summary_orig = pd.DataFrame({
+        "concept": [concept_names[i] for i in row_ind],
+        "matched_dim": [int(dim) for dim in col_ind],
+        "matched_corr": [-float(cost_matrix[i, dim]) for i, dim in zip(row_ind, col_ind)],
+    })
+    summary_orig.loc[len(summary_orig.index)] = {
+        "concept": "average",
+        "matched_dim": np.nan,
+        "matched_corr": summary_orig["matched_corr"].mean()
+    }
+    summary_orig.to_csv(output_dir / "matched_summary.csv", index=False)
+
+    summary_exp = pd.DataFrame({
+        "concept": [concept_names[i] for i in row_ind_exp],
+        "matched_dim_exp": [int(dim) for dim in col_ind_exp],
+        "matched_corr_exp": [-float(cost_matrix_exp[i, dim]) for i, dim in zip(row_ind_exp, col_ind_exp)],
+    })
+    summary_exp.loc[len(summary_exp.index)] = {
+        "concept": "average",
+        "matched_dim_exp": np.nan,
+        "matched_corr_exp": summary_exp["matched_corr_exp"].mean()
+    }
+    summary_exp.to_csv(output_dir / "matched_summary_exp.csv", index=False)
+
+    # Save full JSON
     with open(output_dir / "all_concepts_metrics.json", "w") as f:
         json.dump(all_metrics, f, indent=2)
 
-    print(f"Saved full metrics summary to {output_dir / 'all_concepts_metrics.json'}")
+    print(f"Saved results to {output_dir}")
 
 if __name__ == "__main__":
     main()
