@@ -6,7 +6,7 @@ import random
 import threading
 import queue
 from torch.utils.data import IterableDataset, DataLoader
-from dictionary_learning.trainers import StandardTrainer, TopKTrainer, PAnnealTrainer, GatedSAETrainer, BatchTopKTrainer
+from dictionary_learning.trainers import PAnnealTrainerLoRa
 from dictionary_learning import AutoEncoder
 from dictionary_learning.training import trainSAE
 
@@ -77,13 +77,10 @@ class TensorBuffer:
 
 # === Define trainer classes and target GPUs ===
 trainer_gpu_pairs = [
-    ("batch_topk", BatchTopKTrainer, "cuda:0"),
-    ("topk", TopKTrainer, "cuda:1"),
-    ("panneal", PAnnealTrainer, "cuda:2")
+    ("panneallora_0.1", PAnnealTrainerLoRa, "cuda:0"),
+    ("panneallora_0.5", PAnnealTrainerLoRa, "cuda:1"),
+    ("panneallora_1.0", PAnnealTrainerLoRa, "cuda:2")
 ]
-    # ("gated", GatedSAETrainer, "cuda:3"),
-    # ("vanilla_sae", StandardTrainer, "cuda:0")
-# ]
 
 # === Shared async dataset ===
 dataset = AsyncStreamingDataset(
@@ -108,25 +105,26 @@ def train_on_gpu(name, trainer_class, device):
         "warmup_steps": 1000,
         "device": device,
         "layer": -1,
-        "lm_name": "model.gpt_neox.final_layer_norm"
+        "lm_name": "model.gpt_neox.final_layer_norm",
+        "initial_sparsity_penalty": 0.1,
+        "resample_steps": 25000,
     }
-
-    # Customize sparsity strategy
-    if name in ["topk", "batch_topk"]:
-        trainer_cfg["k"] = 32
-    elif name == "panneal":
+    
+    if name == "panneallora_0.1":
         trainer_cfg.update({
-            "initial_sparsity_penalty": 0.1,
-            "resample_steps": 25000,
+            "lora_coeff_scale": 0.1,
         })
-    elif name == "gated":
+    elif name == "panneallora_0.5":
         trainer_cfg.update({
-            "l1_penalty": 0.1,
+            "lora_coeff_scale": 0.5,
         })
-    else:
-        trainer_cfg["l1_penalty"] = 0.1
-        trainer_cfg["resample_steps"] = 25000
-
+    elif name == "panneallora_1.0":
+        trainer_cfg.update({
+            "lora_coeff_scale": 1.0,
+        })
+    else: 
+        raise NotImplementedError()
+    
     ae = trainSAE(
         data=buffer,
         trainer_configs=[trainer_cfg],

@@ -4,11 +4,11 @@ from typing import Optional
 Implements the standard SAE training scheme.
 """
 
-from ..dictionary import AutoEncoder
+from ..dictionary import AutoEncoderLoRa
 from ..trainers.trainer import SAETrainer, get_lr_schedule, get_sparsity_warmup_fn, ConstrainedAdam
 from ..config import DEBUG
 
-class PAnnealTrainer(SAETrainer):
+class PAnnealTrainerLoRa(SAETrainer):
     """
     SAE training scheme with the option to anneal the sparsity parameter p.
     You can further choose to use Lp or Lp^p sparsity.
@@ -19,13 +19,14 @@ class PAnnealTrainer(SAETrainer):
                  dict_size: int,            # the dimension of the feature of SAE
                  layer: int,                # an index for the LLM activations' layer
                  lm_name: str,              # language model name
-                 dict_class: type = AutoEncoder,        # the SAE strcuture
+                 dict_class: type = AutoEncoderLoRa,        # the SAE strcuture
                  lr: float = 1e-3,
                  warmup_steps: int = 1000, # lr warmup period at start of training and after each resample
                  decay_start: Optional[int] = None, # step at which to start decaying lr
                  sparsity_warmup_steps: Optional[int] = 2000, # number of steps to warm up sparsity penalty
                  sparsity_function: str = 'Lp', # Lp or Lp^p
                  initial_sparsity_penalty: float = 1e-1, # equal to l1 penalty in standard trainer
+                 lora_coeff_scale: float = 1e-1,     # the value of lora_coeff/sparsity_coeef
                  anneal_start: int = 15000, # step at which to start annealing p
                  anneal_end: Optional[int] = None, # step at which to stop annealing, defaults to steps-1
                  p_start: float = 1, # starting value of p (constant throughout warmup)
@@ -35,7 +36,7 @@ class PAnnealTrainer(SAETrainer):
                  resample_steps: Optional[int] = None, # number of steps after which to resample dead neurons
                  device: Optional[str] = None,
                  seed: int = 42,
-                 wandb_name: str = 'PAnnealTrainer',
+                 wandb_name: str = 'PAnnealLoRaTrainer',
                  submodule_name: Optional[str] = None,
     ):
         super().__init__(seed)
@@ -76,6 +77,9 @@ class PAnnealTrainer(SAETrainer):
         self.p_values = t.linspace(p_start, p_end, self.n_sparsity_updates)
         self.p_step_count = 0
         self.sparsity_coeff = initial_sparsity_penalty # alpha
+        
+        self.lora_coeff_scale = lora_coeff_scale
+        
         self.sparsity_queue_length = sparsity_queue_length
         self.sparsity_queue = []
 
@@ -120,21 +124,23 @@ class PAnnealTrainer(SAETrainer):
             # reset encoder/decoder weights for dead neurons
             alive_norm = self.ae.encoder.weight[~deads].norm(dim=-1).mean()
             self.ae.encoder.weight[deads][:n_resample] = sampled_vecs * alive_norm * 0.2
+            
+            alive_norm_lora = self.ae.lora_encoder.weight[~deads].norm(dim=-1).mean()
+            self.ae.lora_encoder.weight[deads][:n_resample] = sampled_vecs * alive_norm_lora * 0.2
+            
             self.ae.decoder.weight[:,deads][:,:n_resample] = (sampled_vecs / sampled_vecs.norm(dim=-1, keepdim=True)).T
             self.ae.encoder.bias[deads][:n_resample] = 0.
-
-
+            self.ae.lora_encoder.bias[deads][:n_resample] = 0.
+        
             # reset Adam parameters for dead neurons
-            state_dict = self.optimizer.state_dict()['state']
-            ## encoder weight
-            state_dict[1]['exp_avg'][deads] = 0.
-            state_dict[1]['exp_avg_sq'][deads] = 0.
-            ## encoder bias
-            state_dict[2]['exp_avg'][deads] = 0.
-            state_dict[2]['exp_avg_sq'][deads] = 0.
-            ## decoder weight
-            state_dict[3]['exp_avg'][:,deads] = 0.
-            state_dict[3]['exp_avg_sq'][:,deads] = 0.
+            state = self.optimizer.state
+            for name, param in self.ae.named_parameters():
+                if "encoder.weight" in name or "lora_encoder.weight" in name or "decoder.weight" in name or "bias" in name:
+                    if param in state:
+                        if "exp_avg" in state[param]:
+                            state[param]["exp_avg"][deads] = 0.0
+                        if "exp_avg_sq" in state[param]:
+                            state[param]["exp_avg_sq"][deads] = 0.0
 
     def lp_norm(self, f, p):
         norm_sq = f.pow(p).sum(dim=-1)
@@ -145,14 +151,21 @@ class PAnnealTrainer(SAETrainer):
         else:
             raise ValueError("Sparsity function must be 'Lp' or 'Lp^p'")
     
+    def nuclear_norm(self, f):
+        U, S, Vh = t.linalg.svd(f, full_matrices=False)
+        return t.sum(S)
+    
     def loss(self, x: t.Tensor, step:int, logging=False):
         sparsity_scale = self.sparsity_warmup_fn(step)
 
         # Compute loss terms
-        x_hat, f = self.ae(x, output_features=True)
+        x_hat, f, f_main, f_lora = self.ae(x, output_features=True)
         recon_loss = (x - x_hat).pow(2).sum(dim=-1).mean()
-        lp_loss = self.lp_norm(f, self.p)
+        lp_loss = self.lp_norm(f_main, self.p)
         scaled_lp_loss = lp_loss * self.sparsity_coeff * sparsity_scale
+        lora_loss = self.nuclear_norm(f_lora)
+        scaled_lora_loss = lora_loss * self.lora_coeff_scale * self.sparsity_coeff * sparsity_scale
+        
         self.lp_loss = lp_loss
         self.scaled_lp_loss = scaled_lp_loss
 
@@ -185,7 +198,7 @@ class PAnnealTrainer(SAETrainer):
             self.steps_since_active[~deads] = 0        
     
         if logging is False:
-            return recon_loss + scaled_lp_loss
+            return recon_loss + scaled_lp_loss + scaled_lora_loss
         else: 
             loss_log = {
                 'p' : self.p,
@@ -193,6 +206,8 @@ class PAnnealTrainer(SAETrainer):
                 'lp_loss' : lp_loss.item(),
                 'scaled_lp_loss' : scaled_lp_loss.item(),
                 'sparsity_coeff' : self.sparsity_coeff,
+                'lora_loss': lora_loss.item(),
+                'scaled_lora_loss': scaled_lora_loss.item(),
             }
             return x, x_hat, f, loss_log
     
@@ -234,4 +249,5 @@ class PAnnealTrainer(SAETrainer):
             'lm_name' : self.lm_name,
             'wandb_name' : self.wandb_name,
             'submodule_name' : self.submodule_name,
+            'sparsity_coeff' : self.sparsity_coeff,
         }

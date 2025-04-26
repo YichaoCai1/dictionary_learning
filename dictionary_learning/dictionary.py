@@ -145,6 +145,102 @@ class AutoEncoder(Dictionary, nn.Module):
         return autoencoder
 
 
+class AutoEncoderLoRa(Dictionary, nn.Module):
+    """
+    A one-layer autoencoder, with a extra encoder for low-ranking regularization.
+    """
+
+    def __init__(self, activation_dim, dict_size, device):
+        super().__init__()
+        self.activation_dim = activation_dim
+        self.dict_size = dict_size
+        self.bias = nn.Parameter(t.zeros(activation_dim).to(device))
+        self.encoder = nn.Linear(activation_dim, dict_size, bias=True, device=device)
+        self.decoder = nn.Linear(dict_size, activation_dim, bias=False, device=device)
+
+        self.lora_encoder = nn.Linear(activation_dim, dict_size, bias=True, device=device)      # For low-rank regularization
+        
+        # initialize encoder and decoder weights
+        w = t.randn(activation_dim, dict_size)
+        ## normalize columns of w
+        w = w / w.norm(dim=0, keepdim=True) * 0.1
+        ## set encoder and decoder weights
+        self.encoder.weight = nn.Parameter(w.clone().T.to(device))
+        self.decoder.weight = nn.Parameter(w.clone().to(device))
+        self.lora_encoder.weight = nn.Parameter(w.clone().T.to(device))
+
+    def encode(self, x):
+        z_main = nn.ReLU()(self.encoder(x - self.bias))
+        z_lora = nn.ReLU()(self.lora_encoder(x - self.bias))
+        z_merged = z_main + z_lora
+        
+        return z_merged, z_main, z_lora
+
+    def decode(self, f):        # The decoder take z_merged as input
+        return self.decoder(f) + self.bias
+
+    def forward(self, x, output_features=False):
+        """
+        Forward pass of an autoencoder.
+        x : activations to be autoencoded
+        output_features : if True, return the encoded features as well as the decoded x
+        """
+        f, f_main, f_lora = self.encode(x)
+        x_hat = self.decode(f)
+        if output_features:
+            return x_hat, f, f_main, f_lora
+        else:
+            return x_hat
+
+    def scale_biases(self, scale: float):
+        self.encoder.bias.data *= scale
+        self.bias.data *= scale
+
+    def normalize_decoder(self):
+        norms = t.norm(self.decoder.weight, dim=0).to(dtype=self.decoder.weight.dtype, device=self.decoder.weight.device)
+
+        if t.allclose(norms, t.ones_like(norms)):
+            return
+        print("Normalizing decoder weights")
+
+        test_input = t.randn(10, self.activation_dim)
+        initial_output = self(test_input)
+
+        self.decoder.weight.data /= norms
+
+        new_norms = t.norm(self.decoder.weight, dim=0)
+        assert t.allclose(new_norms, t.ones_like(new_norms))
+
+        self.encoder.weight.data *= norms[:, None]
+        self.encoder.bias.data *= norms
+
+        new_output = self(test_input)
+
+        # Errors can be relatively large in larger SAEs due to floating point precision
+        assert t.allclose(initial_output, new_output, atol=1e-4)
+
+
+    @classmethod
+    def from_pretrained(cls, path, dtype=t.float, device=None, normalize_decoder=True):
+        """
+        Load a pretrained autoencoder from a file.
+        """
+        state_dict = t.load(path)
+        dict_size, activation_dim = state_dict["encoder.weight"].shape
+        autoencoder = cls(activation_dim, dict_size)
+        autoencoder.load_state_dict(state_dict)
+
+        # This is useful for doing analysis where e.g. feature activation magnitudes are important
+        # If training the SAE using the April update, the decoder weights are not normalized
+        if normalize_decoder:
+            autoencoder.normalize_decoder()
+
+        if device is not None:
+            autoencoder.to(dtype=dtype, device=device)
+
+        return autoencoder
+
+
 class IdentityDict(Dictionary, nn.Module):
     """
     An identity dictionary, i.e. the identity function.

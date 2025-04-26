@@ -5,7 +5,7 @@ from .gated_anneal import GatedAnnealTrainer
 from .top_k import TopKTrainer
 from .jumprelu import JumpReluTrainer
 from .batch_top_k import BatchTopKTrainer, BatchTopKSAE
-
+from .p_anneal_lora import PAnnealTrainerLoRa
 
 __all__ = [
     "StandardTrainer",
@@ -16,4 +16,5 @@ __all__ = [
     "JumpReluTrainer",
     "BatchTopKTrainer",
     "BatchTopKSAE",
+    "PAnnealTrainerLoRa",
 ]
