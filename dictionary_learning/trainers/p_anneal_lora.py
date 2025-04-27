@@ -153,9 +153,6 @@ class PAnnealTrainerLoRa(SAETrainer):
     
     
     def nuclear_norm(self, f_lora, step=None, mode="randomized", k=64, n_iter=2, compute_every=1):
-        """
-        Approximate nuclear norm (sum of singular values) of f_lora.
-        """
         if step is not None and (step % compute_every != 0):
             return t.zeros((), device=f_lora.device, requires_grad=True)
 
@@ -164,13 +161,14 @@ class PAnnealTrainerLoRa(SAETrainer):
             return S.sum()
 
         elif mode == "randomized":
-            # Fast randomized SVD -- safer version
+            epsilon = 1e-6
+            f_lora = f_lora + epsilon * t.randn_like(f_lora)  # 抖动防止奇异, jitter regularization
             B = t.randn(f_lora.shape[1], k, device=f_lora.device)
-            Y = f_lora @ B  # [batch_size, k]
+            Y = f_lora @ B
             for _ in range(n_iter):
-                Y = f_lora @ (f_lora.transpose(0, 1) @ Y)  # safer
-            Q, _ = t.linalg.qr(Y, mode='reduced')  # [batch_size, k]
-            smaller_matrix = Q.transpose(0, 1) @ f_lora  # [k, dict_size]
+                Y = f_lora @ (f_lora.transpose(0, 1) @ Y)
+            Q, _ = t.linalg.qr(Y, mode='reduced')
+            smaller_matrix = Q.transpose(0, 1) @ f_lora
             _, S, _ = t.linalg.svd(smaller_matrix, full_matrices=False)
             return S.sum()
 
@@ -182,7 +180,6 @@ class PAnnealTrainerLoRa(SAETrainer):
 
         else:
             raise ValueError(f"Unknown nuclear norm mode: {mode}")
-
 
     def loss(self, x: t.Tensor, step:int, logging=False):
         sparsity_scale = self.sparsity_warmup_fn(step)
