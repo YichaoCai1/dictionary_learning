@@ -152,34 +152,63 @@ class PAnnealTrainerLoRa(SAETrainer):
             raise ValueError("Sparsity function must be 'Lp' or 'Lp^p'")
     
     
-    def nuclear_norm(self, f_lora, step=None, mode="randomized", k=64, n_iter=2, compute_every=1):
-        if step is not None and (step % compute_every != 0):
-            return t.zeros((), device=f_lora.device, requires_grad=True)
+    def nuclear_norm(
+            self, f_lora, step=None, mode="randomized",
+            k=64, n_iter=2, compute_every=1
+        ):
+        if step is not None and (step % compute_every):
+            return t.zeros((), device=f_lora.device, dtype=f_lora.dtype,
+                            requires_grad=True)
 
-        if mode == "exact":
-            _, S, _ = t.linalg.svd(f_lora, full_matrices=False)
-            return S.sum()
+        self.svd_total_calls += 1
+        k = min(k, *f_lora.shape)          # keep k legal
 
-        elif mode == "randomized":
-            epsilon = 1e-6
-            f_lora = f_lora + epsilon * t.randn_like(f_lora)  # 抖动防止奇异, jitter regularization
-            B = t.randn(f_lora.shape[1], k, device=f_lora.device)
-            Y = f_lora @ B
-            for _ in range(n_iter):
-                Y = f_lora @ (f_lora.transpose(0, 1) @ Y)
-            Q, _ = t.linalg.qr(Y, mode='reduced')
-            smaller_matrix = Q.transpose(0, 1) @ f_lora
-            _, S, _ = t.linalg.svd(smaller_matrix, full_matrices=False)
-            return S.sum()
+        try:
+            if mode == "exact":
+                _, S, _ = t.linalg.svd(f_lora, full_matrices=False)
+                return S.sum()
 
-        elif mode == "subsampled":
-            idx = t.randint(0, f_lora.shape[0], (512,), device=f_lora.device)
-            f_sub = f_lora[idx]
-            _, S, _ = t.linalg.svd(f_sub, full_matrices=False)
-            return S.sum()
+            if mode == "randomized":
+                with t.no_grad():
+                    f_lora = f_lora + 1e-6 * t.randn_like(f_lora)
 
-        else:
-            raise ValueError(f"Unknown nuclear norm mode: {mode}")
+                B = t.randn(f_lora.shape[1], k, device=f_lora.device)
+                Y = f_lora @ B
+                for _ in range(n_iter):
+                    Y = f_lora @ (f_lora.T @ Y)
+                    Y, _ = t.linalg.qr(Y, mode='reduced')   # stabilise
+
+                Q, _ = t.linalg.qr(Y, mode='reduced')
+                smaller = Q.T @ f_lora
+                try:
+                    _, S, _ = t.linalg.svd(smaller, full_matrices=False)
+                except RuntimeError:
+                    self.svd_fallback_count += 1
+                    with t.no_grad():
+                        _, S, _ = t.svd_lowrank(smaller, q=k)
+                return S.sum()
+
+            if mode == "subsampled":
+                m = min(512, f_lora.shape[0])
+                idx = t.randint(0, f_lora.shape[0], (m,),
+                                    device=f_lora.device)
+                f_sub = f_lora[idx]
+                try:
+                    _, S, _ = t.linalg.svd(f_sub, full_matrices=False)
+                except RuntimeError:
+                    self.svd_fallback_count += 1
+                    with t.no_grad():
+                        _, S, _ = t.svd_lowrank(
+                            f_sub, q=min(32, *f_sub.shape))
+                return S.sum()
+
+            raise ValueError(f"Unknown mode: {mode}")
+
+        except Exception as e:
+            print(f"Nuclear norm failed at step {step}: {e}")
+            self.svd_fallback_count += 1
+            return t.zeros((), device=f_lora.device, dtype=f_lora.dtype,
+                            requires_grad=True)
 
     def loss(self, x: t.Tensor, step:int, logging=False):
         sparsity_scale = self.sparsity_warmup_fn(step)

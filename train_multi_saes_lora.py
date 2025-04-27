@@ -5,6 +5,7 @@ import glob
 import random
 import threading
 import queue
+import numpy as np
 from torch.utils.data import IterableDataset, DataLoader
 from dictionary_learning.trainers import PAnnealTrainerLoRa
 from dictionary_learning import AutoEncoder
@@ -75,12 +76,26 @@ class TensorBuffer:
     def close(self):
         pass
 
+    
+def fix_all_seeds(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    print(f"🔒 All random seeds fixed to {seed}")
+
+fix_all_seeds()
+
+
 # === Define trainer classes and target GPUs ===
 trainer_gpu_pairs = [
     ("panneallora_0.1", PAnnealTrainerLoRa, "cuda:0"),
     ("panneallora_0.5", PAnnealTrainerLoRa, "cuda:1"),
     ("panneallora_1.0", PAnnealTrainerLoRa, "cuda:2")
 ]
+
 
 # === Shared async dataset ===
 dataset = AsyncStreamingDataset(
@@ -90,6 +105,7 @@ dataset = AsyncStreamingDataset(
     shuffle_each_chunk=True,
     device="cpu",
 )
+
 
 # === Function to train a model on one GPU ===
 def train_on_gpu(name, trainer_class, device):
