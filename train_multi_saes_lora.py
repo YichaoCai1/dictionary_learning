@@ -93,48 +93,54 @@ dataset = AsyncStreamingDataset(
 
 # === Function to train a model on one GPU ===
 def train_on_gpu(name, trainer_class, device):
-    print(f"🚀 Starting {name} on {device}")
-    buffer = TensorBuffer(data=dataset, out_batch_size=16384, device=device)
+    try:
+        print(f"🚀 Starting {name} on {device}")
+        buffer = TensorBuffer(data=dataset, out_batch_size=16384, device=device)
 
-    trainer_cfg = {
-        "trainer": trainer_class,
-        "activation_dim": 512,
-        "dict_size": 32768,
-        "lr": 1e-4,
-        "steps": 120000,
-        "warmup_steps": 1000,
-        "device": device,
-        "layer": -1,
-        "lm_name": "model.gpt_neox.final_layer_norm",
-        "initial_sparsity_penalty": 0.1,
-        "resample_steps": 25000,
-    }
-    
-    if name == "panneallora_0.1":
-        trainer_cfg.update({
-            "lora_coeff_scale": 0.1,
-        })
-    elif name == "panneallora_0.5":
-        trainer_cfg.update({
-            "lora_coeff_scale": 0.5,
-        })
-    elif name == "panneallora_1.0":
-        trainer_cfg.update({
-            "lora_coeff_scale": 1.0,
-        })
-    else: 
-        raise NotImplementedError()
-    
-    ae = trainSAE(
-        data=buffer,
-        trainer_configs=[trainer_cfg],
-        steps=120000,
-        save_steps=[20000, 40000, 60000, 80000, 100000, 120000],
-        log_steps=10000,
-        verbose=True,
-        save_dir=f"models/{name}"
-    )
-    print(f"✅ Finished {name} on {device}")
+        trainer_cfg = {
+            "trainer": trainer_class,
+            "activation_dim": 512,
+            "dict_size": 32768,
+            "lr": 1e-4,
+            "steps": 120000,
+            "warmup_steps": 1000,
+            "device": device,
+            "layer": -1,
+            "lm_name": "model.gpt_neox.final_layer_norm",
+            "initial_sparsity_penalty": 0.1,
+            "resample_steps": 25000,
+        }
+        
+        if name == "panneallora_0.1":
+            trainer_cfg.update({
+                "lora_coeff_scale": 0.1,
+            })
+        elif name == "panneallora_0.5":
+            trainer_cfg.update({
+                "lora_coeff_scale": 0.5,
+            })
+        elif name == "panneallora_1.0":
+            trainer_cfg.update({
+                "lora_coeff_scale": 1.0,
+            })
+        else: 
+            raise NotImplementedError()
+        
+        ae = trainSAE(
+            data=buffer,
+            trainer_configs=[trainer_cfg],
+            steps=120000,
+            save_steps=[20000, 40000, 60000, 80000, 100000, 120000],
+            log_steps=10000,
+            verbose=True,
+            save_dir=f"models/{name}"
+        )
+        print(f"✅ Finished {name} on {device}")
+
+    except Exception as e:
+        print(f"❌ ERROR in {name} on {device}: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 # === Launch threads for each trainer + GPU ===
 threads = []
