@@ -90,6 +90,9 @@ class PAnnealTrainerLoRa(SAETrainer):
         self.logging_parameters = ['p', 'next_p', 'lp_loss', 'scaled_lp_loss', 'sparsity_coeff']
         self.seed = seed
         self.wandb_name = wandb_name
+        
+        self.svd_fallback_count = 0  # Count how many times SVD fallback happens
+        self.svd_total_calls = 0     # Count how many times nuclear_norm is called
 
         self.resample_steps = resample_steps
         if self.resample_steps is not None:

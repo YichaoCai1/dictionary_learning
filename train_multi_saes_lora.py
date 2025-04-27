@@ -152,11 +152,17 @@ def train_on_gpu(name, trainer_class, device):
             save_dir=f"models/{name}"
         )
         print(f"✅ Finished {name} on {device}")
+        
+        if hasattr(ae, 'trainer') and hasattr(ae.trainer, 'svd_fallback_count'):
+            fallback_rate = 100 * ae.trainer.svd_fallback_count / max(ae.trainer.svd_total_calls, 1)
+            print(f"[Diagnostics] {name} on {device}: SVD fallback triggered {ae.trainer.svd_fallback_count} \
+                times over {ae.trainer.svd_total_calls} nuclear norm calls. (Fallback rate: {fallback_rate:.2f}%)")
 
     except Exception as e:
         print(f"❌ ERROR in {name} on {device}: {str(e)}")
         import traceback
         traceback.print_exc()
+
 
 # === Launch threads for each trainer + GPU ===
 threads = []
