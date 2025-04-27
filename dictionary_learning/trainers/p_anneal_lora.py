@@ -151,9 +151,47 @@ class PAnnealTrainerLoRa(SAETrainer):
         else:
             raise ValueError("Sparsity function must be 'Lp' or 'Lp^p'")
     
-    def nuclear_norm(self, f):
-        U, S, Vh = t.linalg.svd(f, full_matrices=False)
-        return t.sum(S)
+    
+    def nuclear_norm(self, f_lora, step=None, mode="randomized", k=64, n_iter=2, compute_every=1):
+        """
+        Approximate nuclear norm (sum of singular values) of f_lora.
+        
+        Args:
+            f_lora: Tensor of shape [batch_size, dict_size].
+            step: Current training step (optional, used to decide dynamic behavior).
+            mode: "exact" | "randomized" | "subsampled".
+            k: Target rank for randomized SVD (only used if mode=="randomized").
+            n_iter: Number of power iterations for randomized SVD.
+            compute_every: Compute nuclear loss only every N steps. Otherwise return 0.
+        """
+        if step is not None and (step % compute_every != 0):
+            return t.tensor(0.0, device=f_lora.device)
+
+        if mode == "exact":
+            _, S, _ = t.linalg.svd(f_lora, full_matrices=False)
+            return S.sum()
+
+        elif mode == "randomized":
+            # Fast randomized SVD
+            B = t.randn(f_lora.shape[1], k, device=f_lora.device)
+            Y = f_lora @ B
+            for _ in range(n_iter):
+                Y = f_lora @ (f_lora.T @ Y)
+            Q, _ = t.linalg.qr(Y, mode='reduced')
+            smaller_matrix = Q.T @ f_lora
+            _, S, _ = t.linalg.svd(smaller_matrix, full_matrices=False)
+            return S.sum()
+
+        elif mode == "subsampled":
+            # Just random subsample activations
+            idx = t.randint(0, f_lora.shape[0], (512,), device=f_lora.device)
+            f_sub = f_lora[idx]
+            _, S, _ = t.linalg.svd(f_sub, full_matrices=False)
+            return S.sum()
+
+        else:
+            raise ValueError(f"Unknown nuclear norm mode: {mode}")
+    
     
     def loss(self, x: t.Tensor, step:int, logging=False):
         sparsity_scale = self.sparsity_warmup_fn(step)
@@ -163,7 +201,15 @@ class PAnnealTrainerLoRa(SAETrainer):
         recon_loss = (x - x_hat).pow(2).sum(dim=-1).mean()
         lp_loss = self.lp_norm(f_main, self.p)
         scaled_lp_loss = lp_loss * self.sparsity_coeff * sparsity_scale
-        lora_loss = self.nuclear_norm(f_lora)
+        
+        lora_loss = self.nuclear_norm(
+            f_lora,
+            step=step,
+            mode="randomized",  # "exact", "randomized", or "subsampled"
+            k=64,               # number of singular values to approximate
+            n_iter=2,           # number of power iterations (2~3 usually good)
+            compute_every=10    # compute every 10 steps, otherwise return 0
+        )
         scaled_lora_loss = lora_loss * self.lora_coeff_scale * self.sparsity_coeff * sparsity_scale
         
         self.lp_loss = lp_loss
