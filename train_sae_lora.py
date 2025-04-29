@@ -146,9 +146,12 @@ if __name__ == "__main__":
     parser.add_argument("--lora_coeff_scale", type=float, required=True, help="LoRA loss scaling factor")
     parser.add_argument("--layer", type=int, default=-1, help="LLM layer index")
     parser.add_argument("--lm_name", type=str, default="model.gpt_neox.final_layer_norm", help="Language model layer name")
-    parser.add_argument("--save_steps", type=int, nargs="+", default=[8000, 10000, 12000], help="Save checkpoints at these steps")
+    parser.add_argument("--save_steps", type=int, nargs="+", default=[2000, 4000, 6000, 8000, 10000, 12000], help="Save checkpoints at these steps")
     parser.add_argument("--log_steps", type=int, default=1000, help="Log progress every N steps")
 
     args = parser.parse_args()
 
     main(args)
+
+
+# python train_sae_lora.py --experiment_name panneallora_1e-3_12k --device cuda --lora_coeff_scale 0.001
