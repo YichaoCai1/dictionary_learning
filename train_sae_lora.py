@@ -208,7 +208,7 @@ def main(args):
         num_workers=args.num_workers,
         pin_memory=True,
         persistent_workers=args.num_workers > 0,
-        collate_fn=lambda samples: torch.cat(samples, dim=0),  # DataLoader wraps yield in a list
+        collate_fn=lambda sample: sample  # identity – dataset already returns the batch,  # DataLoader wraps yield in a list
     )
 
     data_iter = PrefetchLoader(loader, device) if "cuda" in device else loader
@@ -284,3 +284,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main(args)
+
+
+#  python train_sae_lora.py --experiment_name panneallora_1e-3_12k --device cuda --lora_coeff_scale 0.001
