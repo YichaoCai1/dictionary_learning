@@ -5,6 +5,7 @@ import glob
 import random
 import threading
 import queue
+import numpy as np
 from torch.utils.data import IterableDataset, DataLoader
 from dictionary_learning.trainers import StandardTrainer, TopKTrainer, PAnnealTrainer, GatedSAETrainer, BatchTopKTrainer
 from dictionary_learning import AutoEncoder
@@ -74,6 +75,18 @@ class TensorBuffer:
 
     def close(self):
         pass
+
+
+def fix_all_seeds(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    print(f"🔒 All random seeds fixed to {seed}")
+
+fix_all_seeds()
 
 # === Define trainer classes and target GPUs ===
 trainer_gpu_pairs = [

@@ -173,64 +173,6 @@ class PAnnealTrainerLoRa(SAETrainer):
             return norm_sq.pow(1/p).mean()
         else:
             raise ValueError("Sparsity function must be 'Lp' or 'Lp^p'")
-    
-    
-    # def nuclear_norm(
-    #         self, f_lora, step=None, mode="randomized",
-    #         k=64, n_iter=2, compute_every=1
-    #     ):
-    #     if step is not None and (step % compute_every):
-    #         return t.zeros((), device=f_lora.device, dtype=f_lora.dtype, requires_grad=True)
-
-    #     self.svd_total_calls += 1
-    #     k = min(k, *f_lora.shape)
-
-    #     try:
-    #         if mode == "exact":
-    #             _, S, _ = t.linalg.svd(f_lora, full_matrices=False)
-    #             return S.sum()
-
-    #         if mode == "randomized":
-    #             B = t.randn(f_lora.shape[1], k, device=f_lora.device)
-    #             Y = f_lora @ B
-
-    #             for _ in range(n_iter):
-    #                 Y = f_lora @ (f_lora.T @ Y)
-    #                 Y, _ = t.linalg.qr(Y, mode='reduced')
-
-    #             Q, _ = t.linalg.qr(Y, mode='reduced')
-    #             smaller = Q.T @ f_lora
-
-    #             try:
-    #                 _, S, _ = t.linalg.svd(smaller, full_matrices=False)
-    #             except RuntimeError:
-    #                 self.svd_fallback_count += 1
-    #                 with t.no_grad():
-    #                     _, S, _ = t.svd_lowrank(smaller, q=min(k, *smaller.shape))
-
-    #             return S.sum()
-
-    #         if mode == "subsampled":
-    #             m = min(512, f_lora.shape[0])
-    #             idx = t.randint(0, f_lora.shape[0], (m,), device=f_lora.device)
-    #             f_sub = f_lora[idx]
-
-    #             try:
-    #                 _, S, _ = t.linalg.svd(f_sub, full_matrices=False)
-    #             except RuntimeError:
-    #                 self.svd_fallback_count += 1
-    #                 with t.no_grad():
-    #                     _, S, _ = t.svd_lowrank(f_sub, q=min(32, *f_sub.shape))
-
-    #             return S.sum()
-
-    #         raise ValueError(f"Unknown mode: {mode}")
-
-    #     except Exception as e:
-    #         print(f"❗ Nuclear norm failed at step {step}: {e}")
-    #         self.svd_fallback_count += 1
-    #         return t.zeros((), device=f_lora.device, dtype=f_lora.dtype, requires_grad=True)
-
 
     def nuclear_norm(self, f_lora, step=None, k=32, compute_every=1):
         """

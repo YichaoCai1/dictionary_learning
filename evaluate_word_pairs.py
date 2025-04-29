@@ -70,11 +70,6 @@ def evaluate(dictionary, model, tokenizer, pairs, device, clf):
         z_src = dictionary.encode(x_src.unsqueeze(0))
         z_tgt = dictionary.encode(x_tgt.unsqueeze(0))
         
-        print("\n-----------------\n")
-        print(z_src[0][:50])
-        print(z_src[1][:50])
-        print(z_src[2][:50])
-        
         if isinstance(z_src, tuple) and len(z_src) > 0:
             z_src = z_src[0]
             z_tgt = z_tgt[0]
