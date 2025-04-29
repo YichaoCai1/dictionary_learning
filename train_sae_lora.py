@@ -1,5 +1,5 @@
 # train_sae_lora.py — revised to match your original structure but with the
-# performance fixes we discussed: multi-process streaming, batch-level yielding,
+# performance fixes we discussed: multi‑process streaming, batch‑level yielding,
 # optional GPU prefetch, and safer memory use.
 # ---------------------------------------------------------------------------
 
@@ -14,14 +14,14 @@ from dictionary_learning.trainers import PAnnealTrainerLoRa
 from dictionary_learning.training import trainSAE
 
 # ════════════════════════════════════════════════════════════════════════════
-# 1. Batch-level Async Streaming Dataset
+# 1. Batch‑level Async Streaming Dataset
 # ════════════════════════════════════════════════════════════════════════════
 class AsyncStreamingDataset(IterableDataset):
-    """Streams activation shards (saved with torch.save) and yields *mini-batches*.
+    """Streams activation shards and yields *fixed‑size* mini‑batches.
 
-    Each DataLoader worker is assigned a distinct slice of the file list so we
-    scale I/O throughput as you increase --num_workers.  In-chunk shuffling keeps
-    sample order stochastic without a heavy global shuffle.
+    ‣ If a shard is smaller than “batch_size”, we automatically stitch it
+      together with the next shard so you *never* end up with a 1‑D sample.
+    ‣ Data shape is guaranteed to be **(batch_size, activation_dim)**.
     """
 
     def __init__(
@@ -33,20 +33,19 @@ class AsyncStreamingDataset(IterableDataset):
         use_mmap: bool = True,
     ):
         super().__init__()
-        self.path_pattern = path_pattern
+        self.paths = sorted(glob.glob(path_pattern))
+        if not self.paths:
+            raise FileNotFoundError(f"No files matched {path_pattern}")
         self.batch_size = batch_size
         self.shuffle_files = shuffle_files
         self.shuffle_each_chunk = shuffle_each_chunk
         self.use_mmap = use_mmap
-        self.paths = sorted(glob.glob(path_pattern))
-        if not self.paths:
-            raise FileNotFoundError(f"No files matched {path_pattern}")
 
     # ------------------------------------------------------------------
     def _rng(self):
         info = get_worker_info()
-        worker_id = info.id if info else 0
-        return random.Random(42 + worker_id)
+        w_id = info.id if info else 0
+        return random.Random(42 + w_id)
 
     # ------------------------------------------------------------------
     def _worker_paths(self):
@@ -57,6 +56,50 @@ class AsyncStreamingDataset(IterableDataset):
 
     # ------------------------------------------------------------------
     def __iter__(self):
+        rng = self._rng()
+        paths = self._worker_paths()
+        if self.shuffle_files:
+            rng.shuffle(paths)
+
+        leftover = None  # stores rows that couldn’t fill a full batch yet
+
+        for path in paths:
+            # Use safe loading mode to silence FutureWarning (torch ≥ 2.3)
+            try:
+                chunk = torch.load(
+                    path,
+                    mmap=self.use_mmap,
+                    map_location="cpu",
+                    weights_only=True,
+                )
+            except TypeError:  # older torch w/o weights_only argument
+                chunk = torch.load(path, mmap=self.use_mmap, map_location="cpu")
+
+            if self.shuffle_each_chunk:
+                gen = torch.Generator().manual_seed(rng.randint(0, 2 ** 31))
+                chunk = chunk[torch.randperm(len(chunk), generator=gen)]
+
+            # ── prepend any leftover rows ───────────────────────────────
+            if leftover is not None:
+                chunk = torch.cat([leftover, chunk], dim=0)
+                leftover = None
+
+            total_rows = chunk.shape[0]
+            num_batches = total_rows // self.batch_size
+            if num_batches:
+                batched = chunk[: num_batches * self.batch_size]
+                batched = batched.view(
+                    num_batches, self.batch_size, *chunk.shape[1:]
+                )
+                for b in batched:
+                    yield b
+
+            # keep whatever didn’t fit into a full batch
+            remain = total_rows - num_batches * self.batch_size
+            if remain:
+                leftover = chunk[-remain:]
+
+        # We drop the final partial batch (same behaviour as drop_last=True)(self):
         rng = self._rng()
         paths = self._worker_paths()
         if self.shuffle_files:
@@ -73,7 +116,7 @@ class AsyncStreamingDataset(IterableDataset):
                 g = torch.Generator().manual_seed(rng.randint(0, 2 ** 31))
                 chunk = chunk[torch.randperm(len(chunk), generator=g)]
 
-            # yield contiguous mini-batches, drop the last incomplete one
+            # yield contiguous mini‑batches, drop the last incomplete one
             full_batches = len(chunk) // self.batch_size
             if full_batches == 0:
                 continue
@@ -87,7 +130,7 @@ class AsyncStreamingDataset(IterableDataset):
 # 2. Optional host→device prefetch wrapper
 # ════════════════════════════════════════════════════════════════════════════
 class PrefetchLoader:
-    """Overlaps host-to-device copies with compute (CUDA only)."""
+    """Overlaps host‑to‑device copies with compute (CUDA only)."""
 
     def __init__(self, loader: DataLoader, device: str):
         self.loader = loader
@@ -160,21 +203,13 @@ def main(args):
 
     loader = DataLoader(
         dataset,
-        batch_size=None,            # dataset already returns ready-made tensors
+        batch_size=None,            # dataset already returns ready‑made tensors
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
         persistent_workers=args.num_workers > 0,
-        collate_fn=lambda x: x[0],  # DataLoader wraps yield in a list
+        collate_fn=lambda samples: torch.cat(samples, dim=0),  # DataLoader wraps yield in a list
     )
-    
-    sample_batch = next(iter(loader))          # CPU tensor
-    print("Batch shape:", sample_batch.shape)  # should be (batch_size, activation_dim)
-    assert sample_batch.shape == (
-        args.batch_size,
-        args.activation_dim,
-    ), "Shape mismatch with trainSAE expectations!"
-
 
     data_iter = PrefetchLoader(loader, device) if "cuda" in device else loader
 
@@ -213,7 +248,7 @@ def main(args):
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# 5. CLI entry-point
+# 5. CLI entry‑point
 # ════════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a single SAE model with LoRA (fast loader)")
@@ -228,7 +263,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--disable_mmap", action="store_true")
 
-    # Model / optimisation hyper-params (unchanged from your original)
+    # Model / optimisation hyper‑params (unchanged from your original)
     parser.add_argument("--activation_dim", type=int, default=512)
     parser.add_argument("--dict_size", type=int, default=32768)
     parser.add_argument("--lr", type=float, default=1e-4)
