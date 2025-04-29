@@ -118,13 +118,14 @@ def train_on_gpu(name, trainer_class, device):
             "activation_dim": 512,
             "dict_size": 32768,
             "lr": 1e-4,
-            "steps": 2000,              # 120000
-            "warmup_steps": 1000,       # 1000
+            "steps": 1200,              # 120000
+            "warmup_steps": 10,       # 1000
             "device": device,
             "layer": -1,
             "lm_name": "model.gpt_neox.final_layer_norm",
             "initial_sparsity_penalty": 0.1,
-            "resample_steps": 1000,          # 25000,
+            "resample_steps": 250,          # 25000,
+            "sparsity_warmup_steps": 20,   # 2000
         }
         
         if name == "panneallora_1e-3_test":
@@ -145,8 +146,8 @@ def train_on_gpu(name, trainer_class, device):
         ae = trainSAE(
             data=buffer,
             trainer_configs=[trainer_cfg],
-            steps=2000,          # 120000,
-            save_steps=1000,     # [20000, 40000, 60000, 80000, 100000, 120000],
+            steps=1200,          # 120000,
+            save_steps=[200, 400, 600, 800, 1000, 1200],     # [20000, 40000, 60000, 80000, 100000, 120000],
             log_steps=100,          # 10000,
             verbose=True,
             save_dir=f"models/{name}"
