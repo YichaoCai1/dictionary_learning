@@ -67,9 +67,21 @@ def evaluate(dictionary, model, tokenizer, pairs, device, clf):
         x_src = get_token_activation(model, tokenizer, src, device)
         x_tgt = get_token_activation(model, tokenizer, tgt, device)
 
-        z_src = dictionary.encode(x_src.unsqueeze(0)).squeeze(0).cpu().numpy()
-        z_tgt = dictionary.encode(x_tgt.unsqueeze(0)).squeeze(0).cpu().numpy()
-
+        z_src = dictionary.encode(x_src.unsqueeze(0))
+        z_tgt = dictionary.encode(x_tgt.unsqueeze(0))
+        
+        print("\n-----------------\n")
+        print(z_src[0][:50])
+        print(z_src[1][:50])
+        print(z_src[2][:50])
+        
+        if isinstance(z_src, tuple) and len(z_src) > 0:
+            z_src = z_src[0]
+            z_tgt = z_tgt[0]
+        
+        z_src = z_src.squeeze(0).cpu().numpy()
+        z_tgt = z_tgt.squeeze(0).cpu().numpy()
+        
         logit_src = clf.decision_function([x_src.cpu().numpy()])[0]
         logit_tgt = clf.decision_function([x_tgt.cpu().numpy()])[0]
 
@@ -78,7 +90,8 @@ def evaluate(dictionary, model, tokenizer, pairs, device, clf):
         logits_all.append(logit_src)
         logits_all.append(logit_tgt)
 
-        x_hat = dictionary.decode(dictionary.encode(x_src.unsqueeze(0))).squeeze(0)
+        x_hat = dictionary(x_src.unsqueeze(0)).squeeze(0)
+        
         l2_loss = t.linalg.norm(x_src - x_hat, dim=-1).item()
         l1_loss = x_hat.norm(p=1, dim=-1).item()
         cos_sim = t.nn.functional.cosine_similarity(x_hat, x_tgt, dim=0).item()

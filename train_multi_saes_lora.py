@@ -91,9 +91,9 @@ fix_all_seeds()
 
 # === Define trainer classes and target GPUs ===
 trainer_gpu_pairs = [
-    ("panneallora_0.1", PAnnealTrainerLoRa, "cuda:0"),
-    ("panneallora_0.5", PAnnealTrainerLoRa, "cuda:1"),
-    ("panneallora_1.0", PAnnealTrainerLoRa, "cuda:2")
+    ("panneallora_1e-3_test", PAnnealTrainerLoRa, "cuda:0"),
+    ("panneallora_1e-2_test", PAnnealTrainerLoRa, "cuda:1"),
+    ("panneallora_1e-1_test", PAnnealTrainerLoRa, "cuda:2")
 ]
 
 
@@ -118,8 +118,8 @@ def train_on_gpu(name, trainer_class, device):
             "activation_dim": 512,
             "dict_size": 32768,
             "lr": 1e-4,
-            "steps": 120000,
-            "warmup_steps": 1000,
+            "steps": 1000,            # 120000
+            "warmup_steps": 1000,       # 1000
             "device": device,
             "layer": -1,
             "lm_name": "model.gpt_neox.final_layer_norm",
@@ -127,17 +127,17 @@ def train_on_gpu(name, trainer_class, device):
             "resample_steps": 25000,
         }
         
-        if name == "panneallora_0.1":
+        if name == "panneallora_1e-3_test":
+            trainer_cfg.update({
+                "lora_coeff_scale": 0.001,
+            })
+        elif name == "panneallora_1e-2_test":
+            trainer_cfg.update({
+                "lora_coeff_scale": 0.01,
+            })
+        elif name == "panneallora_1e-1_test":
             trainer_cfg.update({
                 "lora_coeff_scale": 0.1,
-            })
-        elif name == "panneallora_0.5":
-            trainer_cfg.update({
-                "lora_coeff_scale": 0.5,
-            })
-        elif name == "panneallora_1.0":
-            trainer_cfg.update({
-                "lora_coeff_scale": 1.0,
             })
         else: 
             raise NotImplementedError()
@@ -145,9 +145,9 @@ def train_on_gpu(name, trainer_class, device):
         ae = trainSAE(
             data=buffer,
             trainer_configs=[trainer_cfg],
-            steps=120000,
-            save_steps=[20000, 40000, 60000, 80000, 100000, 120000],
-            log_steps=10000,
+            steps=1000,          # 120000,
+            save_steps=1000,     # [20000, 40000, 60000, 80000, 100000, 120000],
+            log_steps=100,          # 10000,
             verbose=True,
             save_dir=f"models/{name}"
         )

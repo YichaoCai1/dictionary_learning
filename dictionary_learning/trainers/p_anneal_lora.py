@@ -155,63 +155,91 @@ class PAnnealTrainerLoRa(SAETrainer):
             raise ValueError("Sparsity function must be 'Lp' or 'Lp^p'")
     
     
-    def nuclear_norm(
-            self, f_lora, step=None, mode="randomized",
-            k=64, n_iter=2, compute_every=1
-        ):
+    # def nuclear_norm(
+    #         self, f_lora, step=None, mode="randomized",
+    #         k=64, n_iter=2, compute_every=1
+    #     ):
+    #     if step is not None and (step % compute_every):
+    #         return t.zeros((), device=f_lora.device, dtype=f_lora.dtype, requires_grad=True)
+
+    #     self.svd_total_calls += 1
+    #     k = min(k, *f_lora.shape)
+
+    #     try:
+    #         if mode == "exact":
+    #             _, S, _ = t.linalg.svd(f_lora, full_matrices=False)
+    #             return S.sum()
+
+    #         if mode == "randomized":
+    #             B = t.randn(f_lora.shape[1], k, device=f_lora.device)
+    #             Y = f_lora @ B
+
+    #             for _ in range(n_iter):
+    #                 Y = f_lora @ (f_lora.T @ Y)
+    #                 Y, _ = t.linalg.qr(Y, mode='reduced')
+
+    #             Q, _ = t.linalg.qr(Y, mode='reduced')
+    #             smaller = Q.T @ f_lora
+
+    #             try:
+    #                 _, S, _ = t.linalg.svd(smaller, full_matrices=False)
+    #             except RuntimeError:
+    #                 self.svd_fallback_count += 1
+    #                 with t.no_grad():
+    #                     _, S, _ = t.svd_lowrank(smaller, q=min(k, *smaller.shape))
+
+    #             return S.sum()
+
+    #         if mode == "subsampled":
+    #             m = min(512, f_lora.shape[0])
+    #             idx = t.randint(0, f_lora.shape[0], (m,), device=f_lora.device)
+    #             f_sub = f_lora[idx]
+
+    #             try:
+    #                 _, S, _ = t.linalg.svd(f_sub, full_matrices=False)
+    #             except RuntimeError:
+    #                 self.svd_fallback_count += 1
+    #                 with t.no_grad():
+    #                     _, S, _ = t.svd_lowrank(f_sub, q=min(32, *f_sub.shape))
+
+    #             return S.sum()
+
+    #         raise ValueError(f"Unknown mode: {mode}")
+
+    #     except Exception as e:
+    #         print(f"❗ Nuclear norm failed at step {step}: {e}")
+    #         self.svd_fallback_count += 1
+    #         return t.zeros((), device=f_lora.device, dtype=f_lora.dtype, requires_grad=True)
+
+
+    def nuclear_norm(self, f_lora, step=None, k=32, compute_every=1):
+        """
+        Fast and stable nuclear norm estimation using torch.svd_lowrank().
+        Args:
+            f_lora (Tensor): The feature tensor to compute nuclear norm on.
+            step (int, optional): Training step for controlling frequency.
+            k (int, optional): Number of singular values to compute (low-rank).
+            compute_every (int, optional): How often to compute (save compute).
+        Returns:
+            Nuclear norm (scalar Tensor).
+        """
         if step is not None and (step % compute_every):
-            return t.zeros((), device=f_lora.device, dtype=f_lora.dtype,
-                            requires_grad=True)
+            # Skip computation, return 0
+            return t.zeros((), device=f_lora.device, dtype=f_lora.dtype, requires_grad=True)
 
         self.svd_total_calls += 1
-        k = min(k, *f_lora.shape)          # keep k legal
+        k = min(k, *f_lora.shape)  # make sure k is safe
 
         try:
-            if mode == "exact":
-                _, S, _ = t.linalg.svd(f_lora, full_matrices=False)
-                return S.sum()
-
-            if mode == "randomized":
-                with t.no_grad():
-                    f_lora = f_lora + 1e-6 * t.randn_like(f_lora)
-
-                B = t.randn(f_lora.shape[1], k, device=f_lora.device)
-                Y = f_lora @ B
-                for _ in range(n_iter):
-                    Y = f_lora @ (f_lora.T @ Y)
-                    Y, _ = t.linalg.qr(Y, mode='reduced')   # stabilise
-
-                Q, _ = t.linalg.qr(Y, mode='reduced')
-                smaller = Q.T @ f_lora
-                try:
-                    _, S, _ = t.linalg.svd(smaller, full_matrices=False)
-                except RuntimeError:
-                    self.svd_fallback_count += 1
-                    with t.no_grad():
-                        _, S, _ = t.svd_lowrank(smaller, q=k)
-                return S.sum()
-
-            if mode == "subsampled":
-                m = min(512, f_lora.shape[0])
-                idx = t.randint(0, f_lora.shape[0], (m,),
-                                    device=f_lora.device)
-                f_sub = f_lora[idx]
-                try:
-                    _, S, _ = t.linalg.svd(f_sub, full_matrices=False)
-                except RuntimeError:
-                    self.svd_fallback_count += 1
-                    with t.no_grad():
-                        _, S, _ = t.svd_lowrank(
-                            f_sub, q=min(32, *f_sub.shape))
-                return S.sum()
-
-            raise ValueError(f"Unknown mode: {mode}")
+            with t.no_grad():
+                _, S, _ = t.svd_lowrank(f_lora, q=k)
+            return S.sum()
 
         except Exception as e:
-            print(f"Nuclear norm failed at step {step}: {e}")
+            print(f"❗ Nuclear norm fallback at step {step}: {e}")
             self.svd_fallback_count += 1
-            return t.zeros((), device=f_lora.device, dtype=f_lora.dtype,
-                            requires_grad=True)
+            return t.zeros((), device=f_lora.device, dtype=f_lora.dtype, requires_grad=True)
+
 
     def loss(self, x: t.Tensor, step:int, logging=False):
         sparsity_scale = self.sparsity_warmup_fn(step)
@@ -227,8 +255,7 @@ class PAnnealTrainerLoRa(SAETrainer):
             step=step,
             mode="randomized",
             k=64,
-            n_iter=1,   # ← power iteration设小一点更安全
-            compute_every=10
+            compute_every=10     
         )
         scaled_lora_loss = lora_loss * self.lora_coeff_scale * self.sparsity_coeff * sparsity_scale
         
@@ -247,7 +274,10 @@ class PAnnealTrainerLoRa(SAETrainer):
                 if self.next_p is not None:
                     local_sparsity_new = t.tensor([i[0] for i in self.sparsity_queue]).mean()
                     local_sparsity_old = t.tensor([i[1] for i in self.sparsity_queue]).mean()
+                    if local_sparsity_old == 0:
+                        local_sparsity_old = 1e-8  # prevent division by zero
                     self.sparsity_coeff = self.sparsity_coeff * (local_sparsity_new / local_sparsity_old).item()
+
                 # Update p
                 self.p = self.p_values[self.p_step_count].item()
                 if self.p_step_count < self.n_sparsity_updates-1:
@@ -294,7 +324,7 @@ class PAnnealTrainerLoRa(SAETrainer):
     def config(self):
         return {
             'trainer_class' : "PAnnealTrainer",
-            'dict_class' : "AutoEncoder",
+            'dict_class' : "AutoEncoderLoRa",
             'activation_dim' : self.activation_dim,
             'dict_size' : self.dict_size,
             'lr' : self.lr,
