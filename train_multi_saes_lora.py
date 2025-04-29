@@ -118,13 +118,13 @@ def train_on_gpu(name, trainer_class, device):
             "activation_dim": 512,
             "dict_size": 32768,
             "lr": 1e-4,
-            "steps": 2000,            # 120000
+            "steps": 2000,              # 120000
             "warmup_steps": 1000,       # 1000
             "device": device,
             "layer": -1,
             "lm_name": "model.gpt_neox.final_layer_norm",
             "initial_sparsity_penalty": 0.1,
-            "resample_steps": 25000,
+            "resample_steps": 1000,          # 25000,
         }
         
         if name == "panneallora_1e-3_test":
