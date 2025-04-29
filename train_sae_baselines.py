@@ -10,7 +10,7 @@ import queue
 import torch
 import numpy as np
 from torch.utils.data import IterableDataset, DataLoader, get_worker_info
-from dictionary_learning.trainers import PAnnealTrainerLoRa
+from dictionary_learning.trainers import TopKTrainer, PAnnealTrainer, BatchTopKTrainer
 from dictionary_learning.training import trainSAE
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -209,7 +209,7 @@ def main(args):
     data_iter = PrefetchLoader(loader, device) if "cuda" in device else loader
     
     trainer_cfg = {
-        "trainer": PAnnealTrainerLoRa,
+        # "trainer": trainer_class,
         "activation_dim": args.activation_dim,
         "dict_size": args.dict_size,
         "lr": args.lr,
@@ -218,11 +218,27 @@ def main(args):
         "device": device,
         "layer": args.layer,
         "lm_name": args.lm_name,
-        "initial_sparsity_penalty": args.initial_sparsity_penalty,
-        "resample_steps": args.resample_steps,
-        "sparsity_warmup_steps": args.sparsity_warmup_steps,
-        "lora_coeff_scale": args.lora_coeff_scale,
     }
+
+    if "topk" in args.experiment_name:
+        trainer_cfg.update({
+            "trainer": TopKTrainer,
+            "k": 32,
+        })
+    elif "batchtopk" in args.experiment_name:
+        trainer_cfg.update({
+            "trainer": BatchTopKTrainer,
+            "k": 32,
+        })
+    elif "panneal" in args.experiment_name:
+        trainer_cfg.update({
+            "trainer": PAnnealTrainer,
+            "initial_sparsity_penalty": args.initial_sparsity_penalty,
+            "resample_steps": args.resample_steps,
+            "sparsity_warmup_steps": args.sparsity_warmup_steps,
+        })
+    else:
+        raise NotImplementedError("Unexpected SAE trainner.")
 
     ae = trainSAE(
         data=data_iter,
@@ -267,7 +283,6 @@ if __name__ == "__main__":
     parser.add_argument("--resample_steps", type=int, default=5000)
     parser.add_argument("--sparsity_warmup_steps", type=int, default=400)
     parser.add_argument("--initial_sparsity_penalty", type=float, default=0.1)
-    parser.add_argument("--lora_coeff_scale", type=float, required=True)
 
     # Layer selection
     parser.add_argument("--layer", type=int, default=-1)
@@ -279,6 +294,3 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main(args)
-
-
-#  python train_sae_lora.py --experiment_name panneallora_1e-3_12k --device cuda --lora_coeff_scale 0.001
