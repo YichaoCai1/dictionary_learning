@@ -253,7 +253,6 @@ class PAnnealTrainerLoRa(SAETrainer):
         lora_loss = self.nuclear_norm(
             f_lora,
             step=step,
-            mode="randomized",
             k=64,
             compute_every=10     
         )
