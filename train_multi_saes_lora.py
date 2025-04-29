@@ -118,7 +118,7 @@ def train_on_gpu(name, trainer_class, device):
             "activation_dim": 512,
             "dict_size": 32768,
             "lr": 1e-4,
-            "steps": 1000,            # 120000
+            "steps": 2000,            # 120000
             "warmup_steps": 1000,       # 1000
             "device": device,
             "layer": -1,
@@ -145,7 +145,7 @@ def train_on_gpu(name, trainer_class, device):
         ae = trainSAE(
             data=buffer,
             trainer_configs=[trainer_cfg],
-            steps=1000,          # 120000,
+            steps=2000,          # 120000,
             save_steps=1000,     # [20000, 40000, 60000, 80000, 100000, 120000],
             log_steps=100,          # 10000,
             verbose=True,
