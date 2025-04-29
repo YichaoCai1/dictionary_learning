@@ -136,14 +136,34 @@ class PAnnealTrainerLoRa(SAETrainer):
             self.ae.lora_encoder.bias[deads][:n_resample] = 0.
         
             # reset Adam parameters for dead neurons
-            state = self.optimizer.state
-            for name, param in self.ae.named_parameters():
-                if "encoder.weight" in name or "lora_encoder.weight" in name or "decoder.weight" in name or "bias" in name:
-                    if param in state:
-                        if "exp_avg" in state[param]:
-                            state[param]["exp_avg"][deads] = 0.0
-                        if "exp_avg_sq" in state[param]:
-                            state[param]["exp_avg_sq"][deads] = 0.0
+            state_dict = self.optimizer.state_dict()['state']
+
+            for param_idx, param in enumerate(self.ae.parameters()):
+                param_state = state_dict.get(param_idx, {})
+                if not param_state: 
+                    continue
+
+                if param.ndim == 2:  # it's a weight
+                    if param.shape[0] == self.dict_size:  
+                        # encoder or lora_encoder weight: mask first dim
+                        if "exp_avg" in param_state:
+                            param_state["exp_avg"][deads] = 0.0
+                        if "exp_avg_sq" in param_state:
+                            param_state["exp_avg_sq"][deads] = 0.0
+                    elif param.shape[1] == self.dict_size:
+                        # decoder weight: mask second dim
+                        if "exp_avg" in param_state:
+                            param_state["exp_avg"][:, deads] = 0.0
+                        if "exp_avg_sq" in param_state:
+                            param_state["exp_avg_sq"][:, deads] = 0.0
+                elif param.ndim == 1:
+                    if param.shape[0] == self.dict_size:
+                        # bias: mask first dim
+                        if "exp_avg" in param_state:
+                            param_state["exp_avg"][deads] = 0.0
+                        if "exp_avg_sq" in param_state:
+                            param_state["exp_avg_sq"][deads] = 0.0
+
 
     def lp_norm(self, f, p):
         norm_sq = f.pow(p).sum(dim=-1)
