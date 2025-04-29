@@ -259,8 +259,8 @@ if __name__ == "__main__":
     parser.add_argument("--data_path", default="saved_activations_70m/activations_*.pt")
 
     # Data loader params
-    parser.add_argument("--batch_size", type=int, default=16384)
-    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--batch_size", type=int, default=10000)
+    parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--disable_mmap", action="store_true")
 
     # Model / optimisation hyper‑params (unchanged from your original)
