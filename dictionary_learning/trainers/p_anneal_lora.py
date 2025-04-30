@@ -174,35 +174,23 @@ class PAnnealTrainerLoRa(SAETrainer):
         else:
             raise ValueError("Sparsity function must be 'Lp' or 'Lp^p'")
 
+
     def nuclear_norm(self, f_lora, step=None, k=32, compute_every=1):
-        """
-        Fast and stable nuclear norm estimation using torch.svd_lowrank().
-        Args:
-            f_lora (Tensor): The feature tensor to compute nuclear norm on.
-            step (int, optional): Training step for controlling frequency.
-            k (int, optional): Number of singular values to compute (low-rank).
-            compute_every (int, optional): How often to compute (save compute).
-        Returns:
-            Nuclear norm (scalar Tensor).
-        """
         if step is not None and (step % compute_every):
-            # Skip computation, return 0
             return t.zeros((), device=f_lora.device, dtype=f_lora.dtype, requires_grad=True)
 
         self.svd_total_calls += 1
-        k = min(k, *f_lora.shape)  # make sure k is safe
+        k = min(k, *f_lora.shape)
 
         try:
-            with t.no_grad():
-                _, S, _ = t.svd_lowrank(f_lora, q=k)
+            _, S, _ = t.svd_lowrank(f_lora, q=k)  
             return S.sum()
-
         except Exception as e:
             print(f"❗ Nuclear norm fallback at step {step}: {e}")
             self.svd_fallback_count += 1
             return t.zeros((), device=f_lora.device, dtype=f_lora.dtype, requires_grad=True)
-
-
+        
+        
     def loss(self, x: t.Tensor, step:int, logging=False):
         sparsity_scale = self.sparsity_warmup_fn(step)
 
@@ -222,6 +210,7 @@ class PAnnealTrainerLoRa(SAETrainer):
         
         self.lp_loss = lp_loss
         self.scaled_lp_loss = scaled_lp_loss
+        self.scaled_lora_loss = scaled_lora_loss
 
         if self.next_p is not None:
             lp_loss_next = self.lp_norm(f, self.next_p)

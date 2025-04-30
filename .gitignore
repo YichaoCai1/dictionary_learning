@@ -167,3 +167,4 @@ nohup.out
 models/
 results/
 word_pairs/
+logs/
