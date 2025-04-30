@@ -220,25 +220,24 @@ def main(args):
         "lm_name": args.lm_name,
     }
 
-    if "topk" in args.experiment_name:
-        trainer_cfg.update({
-            "trainer": TopKTrainer,
-            "k": 32,
-        })
-    elif "batchtopk" in args.experiment_name:
-        trainer_cfg.update({
-            "trainer": BatchTopKTrainer,
-            "k": 32,
-        })
-    elif "panneal" in args.experiment_name:
+    name = args.experiment_name.lower()
+
+    if "batch" in name and "topk" in name:
+        trainer_cfg.update({"trainer": BatchTopKTrainer, "k": 32})
+
+    elif "topk" in name:
+        trainer_cfg.update({"trainer": TopKTrainer, "k": 32})
+
+    elif "panneal" in name:
         trainer_cfg.update({
             "trainer": PAnnealTrainer,
             "initial_sparsity_penalty": args.initial_sparsity_penalty,
             "resample_steps": args.resample_steps,
             "sparsity_warmup_steps": args.sparsity_warmup_steps,
         })
+
     else:
-        raise NotImplementedError("Unexpected SAE trainner.")
+        raise NotImplementedError("Unexpected SAE trainer.")
 
     ae = trainSAE(
         data=data_iter,
