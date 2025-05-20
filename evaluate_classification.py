@@ -19,6 +19,30 @@ from sklearn.metrics import (
     classification_report,
 )
 import importlib
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Assuming df is the DataFrame with performance metrics
+
+def plot_metrics_bar(df):
+    # Exclude the ROC-AUC metric from the DataFrame
+    df = df.drop(columns=['ROC-AUC', 'Precision', 'Recall', 'F1'], errors='ignore')
+
+    # Plotting all metrics for each concept as vertical bars
+    ax = df.plot(kind='bar', figsize=(12, 4), width=0.7)
+    ax.legend().set_visible(False)
+    
+    for container in ax.containers:
+        ax.bar_label(container, fmt='%.2f', fontsize=10)
+
+    plt.ylabel('Accuracy', fontsize=13)
+    plt.title('Classification Performance per Concept', fontsize=13)
+    plt.xlabel('')
+    plt.xticks(rotation=45, ha='right')  # Tilt concept names for better visibility
+    plt.yticks(np.arange(0, 1.2, step=0.1))
+    plt.tight_layout()
+    plt.savefig("classfier_metrics.pdf")
+    plt.show()
 
 # ---------------------- Configuration -----------------------
 PAIR_DIR   = Path("word_pairs")      # directory of your *.txt word-pair files
@@ -93,28 +117,14 @@ df = pd.DataFrame(results).set_index("Concept")
 print("=== Classification Performance per Concept ===\n")
 print(df)
 
-# # 4) Detailed reports (optional)
-# print("\n=== Detailed Classification Reports ===\n")
-# for concept, clf in probes.items():
-#     txt_path = FILE_BY_CONCEPT.get(concept)
-#     if txt_path is None:
-#         continue
-#     pairs = load_word_pairs(txt_path)
-#     X, y = [], []
-#     for neg, pos in pairs:
-#         X.append(token_activation(lm, tok, neg, DEVICE).cpu().numpy())
-#         X.append(token_activation(lm, tok, pos, DEVICE).cpu().numpy())
-#         y.extend([0,1])
-#     X = np.stack(X); y = np.array(y)
-#     y_pred = clf.predict(X)
-#     print(f"-- {concept} --")
-#     print(classification_report(y, y_pred, digits=3))
 
-# 5) LaTeX table
-print("\n=== LaTeX Table ===\n")
-print(df.to_latex(
-    float_format="%.3f",
-    caption="Classification performance of logistic probes for each concept",
-    label="tab:probe_perf",
-    escape=False
-))
+# # 4) LaTeX table
+# print("\n=== LaTeX Table ===\n")
+# print(df.to_latex(
+#     float_format="%.3f",
+#     caption="Classification performance of logistic probes for each concept",
+#     label="tab:probe_perf",
+#     escape=False
+# ))
+
+plot_metrics_bar(df)

@@ -17,10 +17,10 @@ METHODS = [
 ]
 
 LEGENDS = {
-    "topk_24k":              r"top‑$k$",
-    "batchtopk_24k":         r"batch‑top‑$k$",
-    "panneal_24k":           r"$p$‑annealing",
-    "panneallora_1e-1_24k":  r"$p$‑annealing‑LoRa",
+    "topk_24k":              r"top‑$k$ SAE",
+    "batchtopk_24k":         r"batch‑top‑$k$ SAE ",
+    "panneal_24k":           r"$p$‑annealing SAE",
+    "panneallora_1e-1_24k":  r"structured SAE $\bf{(ours)}$",
 }
 
 # colour‑blind–friendly palette + distinctive markers
@@ -36,22 +36,23 @@ def extract_step(dirname: str) -> int:
     return int(m.group(1))
 
 # ------------------------------------------------------------------
-#  Matplotlib styling
+#  Matplotlib styling – white background + explicit ticks
 # ------------------------------------------------------------------
-plt.style.use("seaborn-v0_8")
-plt.rcParams.update({
-    "figure.dpi"      : 110,
-    "axes.facecolor"  : "#f7f7f7",
-    "axes.grid"       : True,
-    "grid.linestyle"  : "--",
-    "grid.alpha"      : 0.6,
-    "axes.prop_cycle" : cycler(color=COLOURS),
-    "axes.titlesize"  : 14,
-    "axes.labelsize"  : 12,
-    "legend.framealpha": 0.0,
-    "lines.linewidth" : 2.0,
-    "lines.markersize": 6,
-})
+plt.style.use("seaborn-v0_8-ticks")  # keep seaborn style for grids
+# plt.rcParams.update({
+#     "figure.dpi"      : 330,
+#     "figure.facecolor": "white",   # white figure background
+#     "axes.facecolor"  : "white",   # white axes background
+#     "axes.grid"       : True,
+#     "grid.linestyle"  : "-",
+#     "grid.alpha"      : 1.0,
+#     "axes.prop_cycle" : cycler(color=COLOURS),
+#     "axes.titlesize"  : 14,
+#     "axes.labelsize"  : 12,
+#     "legend.framealpha": 0.0,
+#     "lines.linewidth" : 2.0,
+#     "lines.markersize": 6,
+# })
 
 fig, ax = plt.subplots(figsize=(7, 4))
 
@@ -86,10 +87,22 @@ for method, colour, marker in zip(METHODS, COLOURS, MARKERS):
         label=LEGENDS[method],
     )
 
-ax.set_xlabel("Training step")
-ax.set_ylabel("Average MSE loss")
-ax.set_title("SAE feature‑reconstruction performance")
-ax.legend(loc="best", ncol=2, handlelength=1.7)
+# ------------------------------------------------------------------
+#  Axis labels, title, legend, and ticks
+# ------------------------------------------------------------------
+ax.set_xlabel("Training step", fontsize=13)
+ax.set_ylabel("Average MSE loss", fontsize=13)
+# ax.set_title("SAE feature‑reconstruction performance")7
+ax.legend(loc="lower left", ncol=2, fontsize=13)
+ax.grid(True)
+
+# Ensure a full box (all spines) around the plot area
+for spine in ax.spines.values():
+    spine.set_visible(True)      # make sure every spine is visible
+    spine.set_linewidth(1.0)     # set box border width
+
+# Ensure ticks are visible and sized appropriately
+ax.tick_params(axis='both', which='both', direction='out', length=6, width=1)
 
 fig.tight_layout()
 fig.savefig("mse_vs_steps.pdf", bbox_inches="tight")  # save *before* showing

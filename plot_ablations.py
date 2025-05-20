@@ -27,7 +27,7 @@ def read_pcc(csv_path: str):
     return avg, cov50
 
 records = []
-for alpha, folder in METHODS.items():
+for gamma, folder in METHODS.items():
     for step in CHECK_STEPS:
         ckpt = os.path.join(RESULTS_DIR, folder, f"ae_{step}")
         mse_csv  = os.path.join(ckpt, "l2_loss.csv")
@@ -35,7 +35,7 @@ for alpha, folder in METHODS.items():
         if not (os.path.exists(mse_csv) and os.path.exists(pcc_csv)):
             continue
         records.append(
-            dict(alpha=alpha,
+            dict(gamma=gamma,
                  step=step,
                  mse=read_mse(mse_csv),
                  pcc_avg=read_pcc(pcc_csv)[0],
@@ -51,35 +51,36 @@ COLORS   = ["#0072B2", "#D55E00", "#009E73", "#CC79A7"]  # colour‑blind friend
 MARKERS  = ["o", "s", "^", "D"]                          # circle, square, tri, dia
 STYLE_CY = cycler(color=COLORS, marker=MARKERS)
 
-plt.style.use("seaborn-v0_8")
-plt.rcParams.update({
-    "axes.prop_cycle": STYLE_CY,
-    "lines.linewidth": 1.4,
-    "lines.markersize": 6,
-    "axes.grid": True,
-    "grid.linestyle": ":",
-    "grid.alpha": 0.6,
-})
+plt.style.use("seaborn-v0_8-ticks")
+# plt.rcParams.update({
+#     "axes.prop_cycle": STYLE_CY,
+#     "lines.linewidth": 1.4,
+#     "lines.markersize": 6,
+#     "axes.grid": True,
+#     "grid.linestyle": ":",
+#     "grid.gamma": 0.6,
+# })
 
 def lineplot(metric: str, ylabel: str, fname: str, title: str):
     fig, ax = plt.subplots(figsize=(4, 3))
-    for alpha in METHODS:
-        sub = df[df["alpha"] == alpha]
-        ax.plot(sub["step"], sub[metric], label=f"α={alpha}")
-    ax.set_xlabel("Training step")
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-    ax.legend(framealpha=.95, ncol=2)
+    for gamma in METHODS:
+        sub = df[df["gamma"] == gamma]
+        ax.plot(sub["step"], sub[metric], label=f"γ={gamma}")
+    ax.set_xlabel("Training step", fontsize=13)
+    ax.set_ylabel(ylabel, fontsize=13)
+    ax.set_title(title, fontsize=13)
+    ax.legend(framealpha=.95, ncol=2, fontsize=13)
+    ax.grid(True)
     fig.tight_layout()
     fig.savefig(fname, bbox_inches="tight")
     plt.close(fig)
     print(f"✓ saved {fname}")
 
 lineplot("mse",      "MSE ↓",               "ablation_mse.pdf",
-         "Reconstruction loss vs. α")
+         "Reconstruction loss vs. γ")
 
 lineplot("pcc_avg",  r"PCC$_{\mathrm{avg}}$ ↑",
-         "ablation_pcc_avg.pdf", "Average PCC vs. α")
+         "ablation_pcc_avg.pdf", "Average PCC vs. γ")
 
 lineplot("coverage", "Coverage @0.5 ↑",
-         "ablation_coverage.pdf", "Coverage vs. α")
+         "ablation_coverage.pdf", "Coverage vs. γ")
